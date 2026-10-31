@@ -48,3 +48,8 @@ dbt/profiles.yml
 .DS_Store
 Thumbs.db
 .vscode/settings.json
+
+#Github
+.github/agents/
+.github/instructions/
+.github/prompts/
