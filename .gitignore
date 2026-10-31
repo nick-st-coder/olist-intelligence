@@ -1,0 +1,50 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# Data — raw is read-only source of truth, derived outputs are not committed
+# Raw Kaggle CSVs are never versioned (see CONTEXT.md §5).
+# Scoped to *.csv because Windows ignore matching is case-insensitive and a bare
+# `Data/` pattern would also swallow the lowercase `data/` output folders.
+Data/*.csv
+data/interim/*
+data/processed/*
+!data/interim/.gitkeep
+!data/processed/.gitkeep
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.json.key
+service-account*.json
+
+# ML artifacts
+mlruns/
+mlartifacts/
+models/
+*.pkl
+*.joblib
+*.onnx
+
+# dbt
+dbt/target/
+dbt/dags/
+dbt/logs/
+dbt/profiles.yml
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json
