@@ -28,6 +28,8 @@ dev = [
 line-length = 100
 target-version = "py311"
 src = ["src", "tests"]
+# Notebooks are authored by hand and reformatting them produces large, meaningless diffs.
+extend-exclude = ["notebooks"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM", "C4", "PTH", "RUF"]
