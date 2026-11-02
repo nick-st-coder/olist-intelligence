@@ -42,6 +42,11 @@ dbt/dags/
 dbt/logs/
 dbt/profiles.yml
 
+# Local agent notes and project context — personal working documents, never committed
+MEMORY.md
+FUTURE.md
+CONTEXT.md
+
 # OS / editor
 .DS_Store
 Thumbs.db
