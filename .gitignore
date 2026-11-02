@@ -12,11 +12,9 @@ htmlcov/
 # Jupyter
 .ipynb_checkpoints/
 
-# Data — raw is read-only source of truth, derived outputs are not committed
-# Raw Kaggle CSVs are never versioned (see CONTEXT.md §5).
-# Scoped to *.csv because Windows ignore matching is case-insensitive and a bare
-# `Data/` pattern would also swallow the lowercase `data/` output folders.
-Data/*.csv
+# Data — raw CSVs are the read-only source of truth and are never versioned.
+# Derived artefacts are also excluded; only the .gitkeep placeholders are tracked.
+data/*.csv
 data/interim/*
 data/processed/*
 !data/interim/.gitkeep

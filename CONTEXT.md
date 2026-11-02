@@ -119,11 +119,10 @@ Primary objective: catch delayed orders while keeping the false-positive rate ac
 ```
 olist-intelligence/
 │
-├── Data/                        # raw CSVs — READ ONLY (see deviation note)
-│
-├── data/                        # derived outputs (created in Phase 3+)
-│   ├── interim/
-│   └── processed/
+├── data/
+│   ├── *.csv                    # raw CSVs — READ ONLY
+│   ├── interim/                 # derived intermediate artefacts
+│   └── processed/               # final analytical datasets
 │
 ├── notebooks/
 │   ├── 01_data_understanding.ipynb
@@ -166,10 +165,11 @@ olist-intelligence/
 └── README.md
 ```
 
-### Deviation from the original plan
+### Data layout
 
-The plan specified `data/raw/`. The CSVs are already in **`Data/`** (capital D) at the repo root.
-**Decision:** keep `Data/` as the canonical raw location and treat it as read-only. `data/` is reserved for derived outputs (`interim/`, `processed/`). All code resolves paths from a single project-root constant, so this is a one-line change if we ever migrate.
+Raw CSVs sit directly in `data/` and are treated as read-only. Derived artefacts go in
+`data/interim/` and `data/processed/`. All code resolves paths from a single project-root
+constant, so the layout can change in one place.
 
 ---
 
