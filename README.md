@@ -69,6 +69,37 @@ data/
 `data/` is **read-only source of truth** — nothing in this repository writes to it. Derived
 artefacts belong in `data/interim/` and `data/processed/`, both gitignored.
 
+### Data model
+
+```mermaid
+erDiagram
+    CUSTOMERS ||--o{ ORDERS : "customer_id (1:1 in practice)"
+    ORDERS ||--o{ ORDER_ITEMS : "order_id"
+    ORDERS ||--o{ ORDER_PAYMENTS : "order_id"
+    ORDERS ||--o{ ORDER_REVIEWS : "order_id"
+    PRODUCTS ||--o{ ORDER_ITEMS : "product_id"
+    SELLERS ||--o{ ORDER_ITEMS : "seller_id"
+    PRODUCT_CATEGORY_NAME_TRANSLATION ||--o{ PRODUCTS : "product_category_name"
+    GEOLOCATION ||--o{ CUSTOMERS : "zip_code_prefix"
+    GEOLOCATION ||--o{ SELLERS : "zip_code_prefix"
+```
+
+| Table | Rows | Grain | Primary key |
+|-------|------|-------|-------------|
+| `orders` | 99,441 | 1 row per order | `order_id` |
+| `order_items` | 112,650 | 1 row per line item | `(order_id, order_item_id)` |
+| `order_payments` | 103,886 | 1 row per payment line | `(order_id, payment_sequential)` |
+| `order_reviews` | 99,224 | 1 row per review | **none** — must dedupe to 1 per order |
+| `customers` | 99,441 | 1 row per order-scoped customer | `customer_id` |
+| `sellers` | 3,095 | 1 row per seller | `seller_id` |
+| `products` | 32,951 | 1 row per product | `product_id` |
+| `geolocation` | 1,000,163 | many rows per ZIP prefix | **none** — must aggregate |
+| `category_translation` | 71 | 1 row per category | `product_category_name` |
+
+`customer_id` is **order-scoped** (1:1 with `order_id`). The person-level identity is
+`customer_unique_id` — 96,096 people, of whom 2,997 bought more than once. Repeat-purchase
+analysis must use `customer_unique_id`.
+
 ---
 
 ## Architecture
@@ -120,39 +151,6 @@ olist-intelligence/
 ├── docker-compose.yml
 └── pyproject.toml            # single source of config (uv, ruff, pytest)
 ```
-
----
-
-## Data model
-
-```mermaid
-erDiagram
-    CUSTOMERS ||--o{ ORDERS : "customer_id (1:1 in practice)"
-    ORDERS ||--o{ ORDER_ITEMS : "order_id"
-    ORDERS ||--o{ ORDER_PAYMENTS : "order_id"
-    ORDERS ||--o{ ORDER_REVIEWS : "order_id"
-    PRODUCTS ||--o{ ORDER_ITEMS : "product_id"
-    SELLERS ||--o{ ORDER_ITEMS : "seller_id"
-    PRODUCT_CATEGORY_NAME_TRANSLATION ||--o{ PRODUCTS : "product_category_name"
-    GEOLOCATION ||--o{ CUSTOMERS : "zip_code_prefix"
-    GEOLOCATION ||--o{ SELLERS : "zip_code_prefix"
-```
-
-| Table | Rows | Grain | Primary key |
-|-------|------|-------|-------------|
-| `orders` | 99,441 | 1 row per order | `order_id` |
-| `order_items` | 112,650 | 1 row per line item | `(order_id, order_item_id)` |
-| `order_payments` | 103,886 | 1 row per payment line | `(order_id, payment_sequential)` |
-| `order_reviews` | 99,224 | 1 row per review | **none** — must dedupe to 1 per order |
-| `customers` | 99,441 | 1 row per order-scoped customer | `customer_id` |
-| `sellers` | 3,095 | 1 row per seller | `seller_id` |
-| `products` | 32,951 | 1 row per product | `product_id` |
-| `geolocation` | 1,000,163 | many rows per ZIP prefix | **none** — must aggregate |
-| `category_translation` | 71 | 1 row per category | `product_category_name` |
-
-`customer_id` is **order-scoped** (1:1 with `order_id`). The person-level identity is
-`customer_unique_id` — 96,096 people, of whom 2,997 bought more than once. Repeat-purchase
-analysis must use `customer_unique_id`.
 
 ---
 
