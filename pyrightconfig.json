@@ -1,0 +1,12 @@
+{
+  "include": ["src", "tests", "dags"],
+  "exclude": [".venv", "**/__pycache__", "dbt/target", "dbt/logs", "notebooks"],
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "executionEnvironments": [
+    {
+      "root": "dags",
+      "reportMissingImports": "none"
+    }
+  ]
+}
