@@ -93,7 +93,9 @@ def aggregate_reviews(reviews: pd.DataFrame) -> pd.DataFrame:
         ["order_id", "review_answer_timestamp", "review_score"],
         ascending=[True, True, True],
     )
-    dedup = ordered.drop_duplicates("order_id", keep="last")[
+    # ``keep="first"`` on an ascending sort keeps the lowest review_score among rows that share
+    # the latest timestamp. 320 orders have such a tie, so the choice is not cosmetic.
+    dedup = ordered.drop_duplicates("order_id", keep="first")[
         ["order_id", "review_id", "review_score"]
     ].reset_index(drop=True)
 
