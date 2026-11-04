@@ -9,12 +9,13 @@ models:
       - name: customer_id
         tests: [not_null]
       - name: order_status
-        tests:
+        data_tests:
           - accepted_values:
-              values: ['delivered', 'shipped', 'canceled', 'unavailable',
-                       'invoiced', 'processing', 'created', 'approved']
+              arguments:
+                values: ['delivered', 'shipped', 'canceled', 'unavailable',
+                         'invoiced', 'processing', 'created', 'approved']
       - name: order_purchase_timestamp
-        tests: [not_null]
+        data_tests: [not_null]
 
   - name: stg_customers
     description: "One row per order-scoped customer. 99,441 rows."
@@ -64,10 +65,11 @@ models:
       - name: order_id
         tests: [not_null]
       - name: review_score
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: [1, 2, 3, 4, 5]
+              arguments:
+                values: [1, 2, 3, 4, 5]
 
   - name: stg_geolocation
     description: "Sampled coordinates, unaggregated. 1,000,163 rows."

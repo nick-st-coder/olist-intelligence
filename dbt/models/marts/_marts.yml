@@ -9,17 +9,19 @@ models:
       - name: order_id
         tests: [unique, not_null]
       - name: customer_id
-        tests:
+        data_tests:
           - not_null
           - relationships:
-              to: ref('dim_customers')
-              field: customer_id
+              arguments:
+                to: ref('dim_customers')
+                field: customer_id
       - name: order_status
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: ['delivered', 'shipped', 'canceled', 'unavailable',
-                       'invoiced', 'processing', 'created', 'approved']
+              arguments:
+                values: ['delivered', 'shipped', 'canceled', 'unavailable',
+                         'invoiced', 'processing', 'created', 'approved']
       - name: order_purchase_timestamp
         tests: [not_null]
       - name: is_label_eligible
@@ -30,15 +32,17 @@ models:
               config:
                 where: "is_label_eligible = true"
       - name: primary_seller_id
-        tests:
+        data_tests:
           - relationships:
-              to: ref('dim_sellers')
-              field: seller_id
+              arguments:
+                to: ref('dim_sellers')
+                field: seller_id
       - name: primary_product_id
-        tests:
+        data_tests:
           - relationships:
-              to: ref('dim_products')
-              field: product_id
+              arguments:
+                to: ref('dim_products')
+                field: product_id
 
   - name: fact_order_items
     description: >
@@ -50,17 +54,19 @@ models:
       - name: order_item_id
         tests: [not_null]
       - name: product_id
-        tests:
+        data_tests:
           - not_null
           - relationships:
-              to: ref('dim_products')
-              field: product_id
+              arguments:
+                to: ref('dim_products')
+                field: product_id
       - name: seller_id
-        tests:
+        data_tests:
           - not_null
           - relationships:
-              to: ref('dim_sellers')
-              field: seller_id
+              arguments:
+                to: ref('dim_sellers')
+                field: seller_id
 
   - name: dim_customers
     description: "One row per order-scoped customer_id. 99,441 rows."

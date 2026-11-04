@@ -24,10 +24,11 @@ models:
       - name: order_id
         tests: [unique, not_null]
       - name: review_score
-        tests:
+        data_tests:
           - not_null
           - accepted_values:
-              values: [1, 2, 3, 4, 5]
+              arguments:
+                values: [1, 2, 3, 4, 5]
 
   - name: int_geolocation_by_zip
     description: >
