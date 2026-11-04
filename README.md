@@ -15,18 +15,19 @@ technologies used.
 | Phase | Scope | State |
 |-------|-------|-------|
 | 1 | Data understanding — inventory, grain, keys, FK integrity, data dictionary, data quality | ✅ Complete — [`notebooks/01_data_understanding.ipynb`](notebooks/01_data_understanding.ipynb) |
-| 2 | Exploratory data analysis — business findings | ⬜ Next |
-| 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ⬜ Planned |
-| 4 | Data engineering — GCS/BigQuery, dbt, Airflow | ⬜ Planned |
+| 2 | Exploratory data analysis — business findings | ✅ Complete — [`notebooks/02_eda.ipynb`](notebooks/02_eda.ipynb) |
+| 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ✅ Complete — `src/preprocessing/`, `data/processed/orders_enriched.parquet` |
+| 4 | Data engineering — Postgres warehouse, dbt models and tests, Airflow | 🟡 In progress — warehouse and dbt complete; GCS/BigQuery and Airflow pending |
 | 5 | Business intelligence — Power BI dashboards, Excel report | ⬜ Planned |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ⬜ Planned |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ⬜ Planned |
 | 8 | Monitoring — Evidently drift, retraining workflow | ⬜ Planned |
 | 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
 
-Only Phase 1 is implemented. The `src/`, `dbt/`, `dags/`, `api/`, `app/` and `tests/` trees
-exist as scaffolding; their modules are empty placeholders. This README is updated as each
-phase lands.
+Phases 1–3 are implemented and Phase 4 is partially landed: the local Postgres warehouse, the
+dbt project and its tests are complete and reconciled against the order-level dataset. The
+`api/`, `app/` and `dags/` trees are still placeholders. This README is updated as each phase
+lands.
 
 ---
 
@@ -151,6 +152,73 @@ olist-intelligence/
 ├── docker-compose.yml
 └── pyproject.toml            # single source of config (uv, ruff, pytest)
 ```
+
+---
+
+## Data warehouse
+
+The raw CSVs are loaded unchanged into a local Postgres `raw` schema, then transformed by dbt
+into a star schema. The warehouse is a second consumer of the same source data as the ML
+pipeline — it does not feed the model, and the model does not feed it.
+
+```mermaid
+flowchart LR
+    A["data/*.csv"] -->|"load_postgres.py"| B["raw<br/>9 tables, unchanged"]
+    B --> C["staging<br/>9 views<br/>cast, rename"]
+    C --> D["intermediate<br/>6 views<br/>dedupe, aggregate to grain"]
+    D --> E["analytics<br/>6 tables<br/>fact_orders, dim_*"]
+    E --> F["Power BI"]
+```
+
+### Running it
+
+```bash
+docker compose up -d postgres
+uv run python -m src.ingestion.load_postgres
+DBT_PROFILES_DIR=./dbt uv run dbt build --project-dir dbt
+```
+
+`dbt build` runs 21 models and 90 tests. The load is idempotent — every table is replaced, so
+re-running produces the same database state.
+
+### Models
+
+| Layer | Materialization | Models |
+|-------|-----------------|--------|
+| Staging | view | `stg_orders`, `stg_customers`, `stg_sellers`, `stg_products`, `stg_order_items`, `stg_order_payments`, `stg_order_reviews`, `stg_geolocation`, `stg_category_translation` |
+| Intermediate | view | `int_order_items_aggregated`, `int_payments_aggregated`, `int_reviews_deduplicated`, `int_geolocation_by_zip`, `int_order_delivery`, `int_primary_item` |
+| Marts | table | `fact_orders`, `fact_order_items`, `dim_customers`, `dim_products`, `dim_sellers`, `dim_date` |
+
+Staging does not filter, join or aggregate — it only casts types and corrects the source
+column-name typos. The intermediate layer is where every one-to-many table is collapsed to
+order grain, so the marts can join safely.
+
+### Reconciliation
+
+`fact_orders` must reproduce the order-level dataset exactly. Both paths are built from the
+same nine CSVs by different code, so agreement is evidence that neither has a join or
+deduplication bug.
+
+| Metric | `fact_orders` (SQL) | `orders_enriched.parquet` (pandas) |
+|--------|--------------------|-----------------------------------|
+| rows | 99,441 | 99,441 |
+| label-eligible | 96,470 | 96,470 |
+| late | 7,826 | 7,826 |
+| late rate | 8.11% | 8.11% |
+
+### Business-logic tests
+
+Beyond the generic `unique` / `not_null` / `relationships` / `accepted_values` tests, six
+singular tests encode rules that a schema cannot express:
+
+| Test | Catches |
+|------|---------|
+| `assert_fact_orders_row_count` | a join that multiplied or dropped order rows |
+| `assert_eligible_order_count` | a change to the label-eligibility rule |
+| `assert_late_rate_in_range` | a broken label definition (rate must stay 7–9%) |
+| `assert_label_null_iff_ineligible` | `is_late` set to FALSE instead of NULL |
+| `assert_late_label_matches_timestamps` | a label that disagrees with the raw timestamps |
+| `assert_orders_without_items_preserved` | an INNER JOIN dropping the 775 orders with no line items |
 
 ---
 
