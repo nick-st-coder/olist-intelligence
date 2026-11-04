@@ -41,6 +41,9 @@ dbt/target/
 dbt/dags/
 dbt/logs/
 dbt/profiles.yml
+dbt/.user.yml
+dbt/dbt_packages/
+!dbt/models/
 
 # Local agent notes and project context — personal working documents, never committed
 MEMORY.md
