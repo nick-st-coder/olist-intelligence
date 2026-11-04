@@ -77,7 +77,11 @@ def olist_pipeline():
     )
 
     counts = extract()
-    validate(counts) >> load_raw() >> dbt_build
+    # Airflow's @task decorator returns an XComArg at runtime, but its type stubs describe the
+    # decorated function's own signature, so a type checker sees `None >> None` here. The
+    # operator is valid — the DAG runs — so the two diagnostics are suppressed rather than the
+    # dependency being restructured around a typing limitation.
+    validate(counts) >> load_raw() >> dbt_build  # pyright: ignore[reportOperatorIssue, reportUnusedExpression]
 
 
 olist_pipeline()
