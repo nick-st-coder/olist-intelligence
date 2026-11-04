@@ -9,6 +9,10 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-olist}
     ports:
       - "${POSTGRES_PORT:-5432}:5432"
+    # Docker defaults /dev/shm to 64 MB. Postgres parallel query workers need more, and the
+    # fact_orders build fails with "could not resize shared memory segment ... No space left on
+    # device" once several workers run concurrently.
+    shm_size: 256mb
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -17,6 +21,44 @@ services:
       timeout: 5s
       retries: 10
       start_period: 10s
+
+  airflow:
+    build:
+      context: .
+      dockerfile: docker/airflow.Dockerfile
+    container_name: olist-airflow
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/airflow/dags
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: postgresql+psycopg2://${POSTGRES_USER:-olist}:${POSTGRES_PASSWORD:-change_me}@postgres:5432/airflow
+      # Inside the compose network the container port is 5432, not the host port 5433.
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: ${POSTGRES_USER:-olist}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me}
+      POSTGRES_DB: ${POSTGRES_DB:-olist}
+      DBT_PROFILES_DIR: /opt/airflow/dbt
+      PYTHONPATH: /opt/airflow
+    ports:
+      # 8080 is held by a host service on this machine, so the UI is published on 8081.
+      - "8081:8080"
+    volumes:
+      - ./dags:/opt/airflow/dags
+      - ./dbt:/opt/airflow/dbt
+      - ./src:/opt/airflow/src
+      - ./data:/opt/airflow/data
+      # src.config locates the project root by requiring data/ and pyproject.toml side by side.
+      - ./pyproject.toml:/opt/airflow/pyproject.toml:ro
+    command: >
+      bash -c "airflow db migrate &&
+               (airflow users create --username admin --password admin
+                 --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
+               airflow standalone"
 
 volumes:
   pgdata:
