@@ -1,0 +1,52 @@
+version: 2
+
+sources:
+  - name: raw
+    description: >
+      The nine Kaggle CSVs, loaded unchanged by `src/ingestion/load_postgres.py`. No casting,
+      filtering or deduplication happens here — this layer is the audit trail.
+    schema: raw
+    tables:
+      - name: orders
+        description: "One row per order. 99,441 rows."
+        columns:
+          - name: order_id
+            tests: [unique, not_null]
+      - name: order_items
+        description: "One row per line item. 112,650 rows. Grain: (order_id, order_item_id)."
+        columns:
+          - name: order_id
+            tests: [not_null]
+      - name: order_payments
+        description: "One row per payment line. 103,886 rows. Grain: (order_id, payment_sequential)."
+        columns:
+          - name: order_id
+            tests: [not_null]
+      - name: order_reviews
+        description: >
+          One row per review. 99,224 rows covering 98,673 orders — 547 orders carry more than
+          one review and 814 rows reuse a review_id, so there is no valid single-column key.
+      - name: customers
+        description: "One row per order-scoped customer. 99,441 rows."
+        columns:
+          - name: customer_id
+            tests: [unique, not_null]
+      - name: sellers
+        description: "One row per seller. 3,095 rows."
+        columns:
+          - name: seller_id
+            tests: [unique, not_null]
+      - name: products
+        description: "One row per product. 32,951 rows."
+        columns:
+          - name: product_id
+            tests: [unique, not_null]
+      - name: geolocation
+        description: >
+          A sample of observed coordinates, not a lookup: 1,000,163 rows over 19,015 ZIP
+          prefixes, mean 52.6 rows per prefix.
+      - name: category_translation
+        description: "Portuguese to English product category names. 71 rows."
+        columns:
+          - name: product_category_name
+            tests: [unique, not_null]

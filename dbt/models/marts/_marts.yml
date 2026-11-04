@@ -1,0 +1,95 @@
+version: 2
+
+models:
+  - name: fact_orders
+    description: >
+      One row per order. Grain: order_id. 99,441 rows, of which 96,470 are label-eligible and
+      7,826 are late (8.11%). Every join is LEFT so no order is dropped.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_customers')
+              field: customer_id
+      - name: order_status
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['delivered', 'shipped', 'canceled', 'unavailable',
+                       'invoiced', 'processing', 'created', 'approved']
+      - name: order_purchase_timestamp
+        tests: [not_null]
+      - name: is_label_eligible
+        tests: [not_null]
+      - name: is_late
+        tests:
+          - not_null:
+              config:
+                where: "is_label_eligible = true"
+      - name: primary_seller_id
+        tests:
+          - relationships:
+              to: ref('dim_sellers')
+              field: seller_id
+      - name: primary_product_id
+        tests:
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+
+  - name: fact_order_items
+    description: >
+      One row per line item. Grain: (order_id, order_item_id). 112,650 rows. Do not join to
+      fact_orders — the grains differ and the join multiplies rows.
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: order_item_id
+        tests: [not_null]
+      - name: product_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_products')
+              field: product_id
+      - name: seller_id
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_sellers')
+              field: seller_id
+
+  - name: dim_customers
+    description: "One row per order-scoped customer_id. 99,441 rows."
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: customer_unique_id
+        tests: [not_null]
+      - name: customer_state
+        tests: [not_null]
+
+  - name: dim_products
+    description: "One row per product. 32,951 rows."
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+      - name: product_category
+        tests: [not_null]
+
+  - name: dim_sellers
+    description: "One row per seller. 3,095 rows."
+    columns:
+      - name: seller_id
+        tests: [unique, not_null]
+      - name: seller_state
+        tests: [not_null]
+
+  - name: dim_date
+    description: "Contiguous calendar spine, 2016-01-01 to 2018-12-31."
+    columns:
+      - name: date_day
+        tests: [unique, not_null]

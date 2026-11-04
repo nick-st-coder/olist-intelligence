@@ -1,0 +1,58 @@
+version: 2
+
+models:
+  - name: int_order_items_aggregated
+    description: "Line items collapsed to one row per order. 99,441 rows."
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: n_items
+        tests:
+          - not_null
+
+  - name: int_payments_aggregated
+    description: "Payment lines collapsed to one row per order. 99,441 rows."
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+
+  - name: int_reviews_deduplicated
+    description: >
+      Reviews reduced to exactly one row per order. 98,673 rows. The latest
+      review_answer_timestamp wins, tie-broken by the lowest review_score.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: review_score
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+
+  - name: int_geolocation_by_zip
+    description: >
+      One median coordinate per ZIP prefix, after dropping coordinates outside Brazil's
+      bounding box. ~19,015 rows.
+    columns:
+      - name: geolocation_zip_code_prefix
+        tests: [unique, not_null]
+      - name: lat
+        tests: [not_null]
+      - name: lng
+        tests: [not_null]
+
+  - name: int_order_delivery
+    description: >
+      The delivery label. is_late is NULL when the order is not label-eligible, never FALSE.
+      Strict comparison: a delivery on the estimated day counts as late.
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: is_label_eligible
+        tests: [not_null]
+
+  - name: int_primary_item
+    description: "The seller and product of the first line item, one row per order."
+    columns:
+      - name: order_id
+        tests: [unique, not_null]

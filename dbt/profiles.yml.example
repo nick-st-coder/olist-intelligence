@@ -1,0 +1,20 @@
+# Copy to profiles.yml and fill in. profiles.yml holds credentials and is gitignored.
+#
+#   cp dbt/profiles.yml.example dbt/profiles.yml
+#   export DBT_PROFILES_DIR=./dbt
+#   uv run dbt debug
+
+olist:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: "{{ env_var('POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_PORT', '5432') | int }}"
+      user: "{{ env_var('POSTGRES_USER', 'olist') }}"
+      password: "{{ env_var('POSTGRES_PASSWORD', 'change_me') }}"
+      dbname: "{{ env_var('POSTGRES_DB', 'olist') }}"
+      schema: dbt_dev
+      threads: 4
+      keepalives_idle: 0
+      connect_timeout: 10

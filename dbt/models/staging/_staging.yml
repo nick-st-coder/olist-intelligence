@@ -1,0 +1,82 @@
+version: 2
+
+models:
+  - name: stg_orders
+    description: "Orders with timestamps cast. One row per order. 99,441 rows."
+    columns:
+      - name: order_id
+        tests: [unique, not_null]
+      - name: customer_id
+        tests: [not_null]
+      - name: order_status
+        tests:
+          - accepted_values:
+              values: ['delivered', 'shipped', 'canceled', 'unavailable',
+                       'invoiced', 'processing', 'created', 'approved']
+      - name: order_purchase_timestamp
+        tests: [not_null]
+
+  - name: stg_customers
+    description: "One row per order-scoped customer. 99,441 rows."
+    columns:
+      - name: customer_id
+        tests: [unique, not_null]
+      - name: customer_unique_id
+        tests: [not_null]
+
+  - name: stg_sellers
+    description: "One row per seller. 3,095 rows."
+    columns:
+      - name: seller_id
+        tests: [unique, not_null]
+
+  - name: stg_products
+    description: "One row per product. 32,951 rows. Source typos corrected."
+    columns:
+      - name: product_id
+        tests: [unique, not_null]
+
+  - name: stg_order_items
+    description: "One row per line item. 112,650 rows. Grain: (order_id, order_item_id)."
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: order_item_id
+        tests: [not_null]
+      - name: price
+        tests:
+          - not_null
+      - name: freight_value
+        tests:
+          - not_null
+
+  - name: stg_order_payments
+    description: "One row per payment line. 103,886 rows."
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: payment_sequential
+        tests: [not_null]
+
+  - name: stg_order_reviews
+    description: "One row per review. 99,224 rows. Not unique per order."
+    columns:
+      - name: order_id
+        tests: [not_null]
+      - name: review_score
+        tests:
+          - not_null
+          - accepted_values:
+              values: [1, 2, 3, 4, 5]
+
+  - name: stg_geolocation
+    description: "Sampled coordinates, unaggregated. 1,000,163 rows."
+    columns:
+      - name: geolocation_zip_code_prefix
+        tests: [not_null]
+
+  - name: stg_category_translation
+    description: "Portuguese to English category names. 71 rows."
+    columns:
+      - name: product_category_name
+        tests: [unique, not_null]
