@@ -51,6 +51,21 @@ def table_name(logical_name: str) -> str:
     return logical_name
 
 
+def _driver() -> str:
+    """Pick the Postgres DBAPI driver available in this environment.
+
+    SQLAlchemy 2.x supports ``psycopg`` (v3); SQLAlchemy 1.4 — which Airflow 2.9 pins — only
+    supports ``psycopg2``. The loader runs both from the host venv and from inside the Airflow
+    image, so the driver is resolved at runtime rather than hardcoded.
+    """
+    try:
+        import psycopg  # noqa: F401
+
+        return "psycopg"
+    except ImportError:
+        return "psycopg2"
+
+
 def get_engine() -> Engine:
     """Build a SQLAlchemy engine from the ``POSTGRES_*`` environment variables."""
     load_dotenv(PROJECT_ROOT / ".env")
@@ -64,7 +79,7 @@ def get_engine() -> Engine:
         )
 
     url = (
-        f"postgresql+psycopg://{os.environ['POSTGRES_USER']}:"
+        f"postgresql+{_driver()}://{os.environ['POSTGRES_USER']}:"
         f"{os.environ['POSTGRES_PASSWORD']}@"
         f"{os.environ.get('POSTGRES_HOST', 'localhost')}:"
         f"{os.environ.get('POSTGRES_PORT', '5432')}/"
