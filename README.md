@@ -17,7 +17,7 @@ technologies used.
 | 1 | Data understanding — inventory, grain, keys, FK integrity, data dictionary, data quality | ✅ Complete — [`notebooks/01_data_understanding.ipynb`](notebooks/01_data_understanding.ipynb) |
 | 2 | Exploratory data analysis — business findings | ✅ Complete — [`notebooks/02_eda.ipynb`](notebooks/02_eda.ipynb) |
 | 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ✅ Complete — `src/preprocessing/`, `data/processed/orders_enriched.parquet` |
-| 4 | Data engineering — Postgres warehouse, dbt models and tests, Airflow | 🟡 In progress — warehouse and dbt complete; GCS/BigQuery and Airflow pending |
+| 4 | Data engineering — Postgres warehouse, dbt models and tests, Airflow | 🟡 In progress — warehouse, dbt and Airflow complete; GCS/BigQuery pending |
 | 5 | Business intelligence — Power BI dashboards, Excel report | ⬜ Planned |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ⬜ Planned |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ⬜ Planned |
@@ -25,9 +25,9 @@ technologies used.
 | 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
 
 Phases 1–3 are implemented and Phase 4 is partially landed: the local Postgres warehouse, the
-dbt project and its tests are complete and reconciled against the order-level dataset. The
-`api/`, `app/` and `dags/` trees are still placeholders. This README is updated as each phase
-lands.
+dbt project, its tests and the Airflow DAG are complete and reconciled against the order-level
+dataset. The `api/` and `app/` trees are still placeholders. This README is updated as each
+phase lands.
 
 ---
 
@@ -180,6 +180,38 @@ DBT_PROFILES_DIR=./dbt uv run dbt build --project-dir dbt
 
 `dbt build` runs 21 models and 90 tests. The load is idempotent — every table is replaced, so
 re-running produces the same database state.
+
+### Orchestration
+
+`dags/olist_pipeline.py` runs the whole pipeline as four tasks:
+
+```
+extract → validate → load_raw → dbt_build
+```
+
+`extract` reads the nine CSVs and returns their row counts; `validate` fails the run if any
+count differs from the verified figures, so a truncated source file never reaches the
+warehouse; `load_raw` replaces the `raw` schema; `dbt_build` runs the models and tests.
+
+```bash
+docker compose up -d airflow          # UI on http://localhost:8081 (admin / admin)
+docker exec olist-airflow bash -c "airflow dags test olist_pipeline 2026-11-04"
+```
+
+The DAG is idempotent: running it twice leaves the warehouse in the same state. That second
+run is the real test, because a loader that only works once will fail on every Airflow retry.
+
+Two container settings are load-bearing and easy to miss:
+
+- **`shm_size: 256mb`** on Postgres. Docker's default 64 MB `/dev/shm` is too small for the
+  parallel workers `fact_orders` spawns, and the build fails with `could not resize shared
+  memory segment ... No space left on device`.
+- **`pyproject.toml` mounted into the Airflow container.** `src.config` locates the project
+  root by requiring `data/` and `pyproject.toml` side by side.
+
+The Airflow image installs dbt **outside** Airflow's constraints file, because those
+constraints pin dbt to 1.8 while the project's YAML uses the `arguments` test syntax added in
+1.10. SQLAlchemy is reinstalled at `<2` afterwards to keep Airflow's ORM working.
 
 ### Models
 
