@@ -4,6 +4,6 @@ select
     product_id,
     seller_id,
     cast(shipping_limit_date as timestamp) as shipping_limit_date,
-    cast(price         as numeric(12, 2)) as price,
-    cast(freight_value as numeric(12, 2)) as freight_value
+    cast(price         as {{ dbt.type_numeric() }}) as price,
+    cast(freight_value as {{ dbt.type_numeric() }}) as freight_value
 from {{ source('raw', 'order_items') }}

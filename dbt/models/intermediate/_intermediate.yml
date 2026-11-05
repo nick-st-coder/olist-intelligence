@@ -26,9 +26,12 @@ models:
       - name: review_score
         data_tests:
           - not_null
+          # quote: false keeps the values as integers. The default quotes them as strings,
+          # which Postgres coerces but BigQuery rejects (INT64 vs STRING).
           - accepted_values:
               arguments:
                 values: [1, 2, 3, 4, 5]
+                quote: false
 
   - name: int_geolocation_by_zip
     description: >

@@ -10,6 +10,11 @@
 -- ``delay_days`` truncates towards zero, so an order delivered 59 minutes after the estimate
 -- yields delay_days = 0 while still being late. 1,292 orders are in exactly that state.
 -- ``delay_hours`` keeps the sub-day resolution for diagnostics.
+--
+-- Day counts use ``dbt.datediff`` rather than subtracting timestamps: Postgres returns an
+-- interval from ``a - b``, BigQuery does not, and the macro emits the right form for each
+-- warehouse. Note the argument order is (start, end, part) — the reverse of Postgres'
+-- ``date_part('day', end - start)``, which is why the raw subtraction was not portable.
 select
     order_id,
     order_purchase_timestamp,
@@ -29,15 +34,15 @@ select
         then order_delivered_customer_date > order_estimated_delivery_date
     end as is_late,
 
-    date_part('day', order_estimated_delivery_date - order_purchase_timestamp)::integer
+    {{ dbt.datediff('order_purchase_timestamp', 'order_estimated_delivery_date', 'day') }}
         as estimated_lead_days,
 
-    date_part('day', order_delivered_customer_date - order_purchase_timestamp)::integer
+    {{ dbt.datediff('order_purchase_timestamp', 'order_delivered_customer_date', 'day') }}
         as delivery_days,
 
-    date_part('day', order_delivered_customer_date - order_estimated_delivery_date)::integer
+    {{ dbt.datediff('order_estimated_delivery_date', 'order_delivered_customer_date', 'day') }}
         as delay_days,
 
-    date_part('epoch', order_delivered_customer_date - order_estimated_delivery_date) / 3600.0
+    {{ dbt.datediff('order_estimated_delivery_date', 'order_delivered_customer_date', 'hour') }}
         as delay_hours
 from {{ ref('stg_orders') }}

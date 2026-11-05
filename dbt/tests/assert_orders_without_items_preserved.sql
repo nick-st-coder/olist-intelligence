@@ -3,4 +3,4 @@
 -- still be present with null facts rather than dropped.
 select count(*) as n_orders_without_items
 from {{ ref('fact_orders') }}
-having count(*) filter (where n_items is null) <> 775
+having sum(case when n_items is null then 1 else 0 end) <> 775
