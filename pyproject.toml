@@ -26,6 +26,7 @@ dev = [
     "nbformat>=5.10",
     "dbt-core>=1.12.6",
     "dbt-postgres>=1.11.0",
+    "dbt-bigquery>=1.12.2",
 ]
 
 [tool.ruff]

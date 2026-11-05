@@ -18,3 +18,14 @@ olist:
       threads: 4
       keepalives_idle: 0
       connect_timeout: 10
+
+    bq:
+      type: bigquery
+      # oauth uses Application Default Credentials. A service-account keyfile is not an option
+      # here: the project enforces constraints/iam.disableServiceAccountKeyCreation.
+      method: oauth
+      project: "{{ env_var('GCP_PROJECT_ID') }}"
+      dataset: dbt_dev
+      threads: 4
+      location: US
+      priority: interactive
