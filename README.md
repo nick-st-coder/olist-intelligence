@@ -17,17 +17,17 @@ technologies used.
 | 1 | Data understanding — inventory, grain, keys, FK integrity, data dictionary, data quality | ✅ Complete — [`notebooks/01_data_understanding.ipynb`](notebooks/01_data_understanding.ipynb) |
 | 2 | Exploratory data analysis — business findings | ✅ Complete — [`notebooks/02_eda.ipynb`](notebooks/02_eda.ipynb) |
 | 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ✅ Complete — `src/preprocessing/`, `data/processed/orders_enriched.parquet` |
-| 4 | Data engineering — Postgres warehouse, dbt models and tests, Airflow | 🟡 In progress — warehouse, dbt and Airflow complete; GCS/BigQuery pending |
+| 4 | Data engineering — Postgres + BigQuery warehouses, dbt models and tests, Airflow | ✅ Complete — both targets build 111 tests green and reconcile to identical figures |
 | 5 | Business intelligence — Power BI dashboards, Excel report | ⬜ Planned |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ⬜ Planned |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ⬜ Planned |
 | 8 | Monitoring — Evidently drift, retraining workflow | ⬜ Planned |
 | 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
 
-Phases 1–3 are implemented and Phase 4 is partially landed: the local Postgres warehouse, the
-dbt project, its tests and the Airflow DAG are complete and reconciled against the order-level
-dataset. The `api/` and `app/` trees are still placeholders. This README is updated as each
-phase lands.
+Phases 1–4 are implemented: the local Postgres warehouse, the BigQuery warehouse, the dbt
+project with its tests, and the Airflow DAG are complete, and the two warehouses reconcile to
+identical figures. The `api/` and `app/` trees are still placeholders. This README is updated
+as each phase lands.
 
 ---
 
@@ -183,22 +183,24 @@ re-running produces the same database state.
 
 ### Orchestration
 
-`dags/olist_pipeline.py` runs the whole pipeline as four tasks:
+`dags/olist_pipeline.py` runs the pipeline as a graph with two destinations:
 
 ```
-extract → validate → load_raw → dbt_build
+extract → validate ─┬─→ load_raw ────────→ dbt_build_local   (Postgres)
+                    └─→ upload_to_gcs → load_to_bigquery → dbt_build_bq   (BigQuery)
 ```
 
 `extract` reads the nine CSVs and returns their row counts; `validate` fails the run if any
-count differs from the verified figures, so a truncated source file never reaches the
-warehouse; `load_raw` replaces the `raw` schema; `dbt_build` runs the models and tests.
+count differs from the verified figures, so a truncated source file never reaches either
+warehouse. The cloud branch is enabled with `OLIST_CLOUD_ENABLED=true`; the local branch always
+runs, so the DAG works with or without a GCP account.
 
 ```bash
 docker compose up -d airflow          # UI on http://localhost:8081 (admin / admin)
 docker exec olist-airflow bash -c "airflow dags test olist_pipeline 2026-11-04"
 ```
 
-The DAG is idempotent: running it twice leaves the warehouse in the same state. That second
+The DAG is idempotent: running it twice leaves both warehouses in the same state. That second
 run is the real test, because a loader that only works once will fail on every Airflow retry.
 
 Two container settings are load-bearing and easy to miss:
@@ -212,6 +214,39 @@ Two container settings are load-bearing and easy to miss:
 The Airflow image installs dbt **outside** Airflow's constraints file, because those
 constraints pin dbt to 1.8 while the project's YAML uses the `arguments` test syntax added in
 1.10. SQLAlchemy is reinstalled at `<2` afterwards to keep Airflow's ORM working.
+
+### Cloud target
+
+The same 21 models build against BigQuery with `--target bq`. Only the profile changes; the
+SQL is shared. Six constructs needed a portable form:
+
+| Postgres | Portable form | Why |
+|---|---|---|
+| `date_part('day', a - b)` | `dbt.datediff(a, b, 'day')` | BigQuery cannot subtract timestamps |
+| `generate_series(...)` | `dbt.date_spine(...)` | Postgres-only function |
+| `numeric(12, 2)` | `dbt.type_numeric()` | BigQuery rejects parameterised casts |
+| `percentile_cont(0.5) within group` | `row_number()` window | BigQuery has no ordered-set aggregates |
+| `mode() within group` | `row_number()` over a count | same |
+| `count(*) filter (where ...)` | `sum(case when ... then 1 else 0 end)` | BigQuery has no `FILTER` |
+
+Two further differences are not syntax but semantics:
+
+- **`accepted_values` on an integer column** needs `quote: false`. The default quotes values as
+  strings, which Postgres coerces and BigQuery rejects.
+- **`day_of_week`** is normalised to 0 = Monday in `dim_date`, because Postgres' `isodow` is
+  1 = Monday while BigQuery's `dayofweek` is 1 = Sunday.
+
+Both warehouses produce identical figures:
+
+| Metric | Postgres | BigQuery |
+|--------|----------|----------|
+| rows | 99,441 | 99,441 |
+| label-eligible | 96,470 | 96,470 |
+| late | 7,826 | 7,826 |
+| late rate | 8.11% | 8.11% |
+
+Authentication uses Application Default Credentials rather than a service-account keyfile,
+because the project enforces `constraints/iam.disableServiceAccountKeyCreation`.
 
 ### Models
 
