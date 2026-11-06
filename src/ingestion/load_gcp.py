@@ -78,8 +78,11 @@ def _settings() -> tuple[str, str]:
 
 def upload_to_gcs(data_dir: Path | None = None) -> dict[str, str]:
     """Upload the nine raw CSVs to ``gs://<bucket>/raw/`` and return their URIs."""
-    _, bucket_name = _settings()
-    client = storage.Client()
+    project, bucket_name = _settings()
+    # The project is passed explicitly: user Application Default Credentials carry no project,
+    # so the client cannot infer one and raises "Project was not passed and could not be
+    # determined from the environment".
+    client = storage.Client(project=project)
     bucket = client.bucket(bucket_name)
     source_dir = data_dir or DATA_DIR
 
