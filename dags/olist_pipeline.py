@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+from typing import cast
 
 from airflow.decorators import dag, task
+from airflow.models.xcom_arg import XComArg
 from airflow.operators.bash import BashOperator
 
 DEFAULT_ARGS = {
@@ -102,24 +104,28 @@ def olist_pipeline():
         bash_command="cd /opt/airflow/dbt && dbt build --target dev",
     )
 
-    dbt_build_bq = BashOperator(
-        task_id="dbt_build_bq",
-        bash_command="cd /opt/airflow/dbt && dbt build --target bq",
-    )
-
     counts = extract()
-    validated = validate(counts)
-    local = load_raw()
+    # ``@task`` returns an ``XComArg`` at runtime, but a type checker only sees the function's
+    # declared return type. Casting keeps the task bodies honestly annotated while letting the
+    # dependency chains below type-check.
+    validated = cast(XComArg, validate(counts))
+    local = cast(XComArg, load_raw())
 
-    # The cloud branch is skipped rather than removed when disabled, so the DAG graph stays the
-    # same and the task history shows the branch was considered.
+    # The cloud tasks are only instantiated when the branch is enabled. Creating them
+    # unconditionally would leave dbt_build_bq with no upstream dependency, and Airflow runs
+    # every task with no dependencies as a root — so the cloud build would fire even with the
+    # flag off.
     if cloud_enabled():
-        uris = upload_to_gcs()
-        cloud = load_to_bigquery(uris)
-        validated >> local >> dbt_build_local
-        validated >> uris >> cloud >> dbt_build_bq
+        dbt_build_bq = BashOperator(
+            task_id="dbt_build_bq",
+            bash_command="cd /opt/airflow/dbt && dbt build --target bq",
+        )
+        uris = cast(XComArg, upload_to_gcs())
+        cloud = cast(XComArg, load_to_bigquery(uris))
+        _ = validated >> local >> dbt_build_local
+        _ = validated >> uris >> cloud >> dbt_build_bq
     else:
-        validated >> local >> dbt_build_local
+        _ = validated >> local >> dbt_build_local
 
 
 olist_pipeline()
