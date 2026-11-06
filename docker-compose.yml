@@ -44,6 +44,13 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-olist}
       DBT_PROFILES_DIR: /opt/airflow/dbt
       PYTHONPATH: /opt/airflow
+      # Set to "true" to run the GCS/BigQuery branch. The local Postgres path always runs.
+      OLIST_CLOUD_ENABLED: ${OLIST_CLOUD_ENABLED:-false}
+      GCP_PROJECT_ID: ${GCP_PROJECT_ID:-}
+      GCS_BUCKET_RAW: ${GCS_BUCKET_RAW:-}
+      # Application Default Credentials are mounted read-only from the host. The project
+      # enforces constraints/iam.disableServiceAccountKeyCreation, so there is no keyfile.
+      GOOGLE_APPLICATION_CREDENTIALS: /opt/airflow/gcp/adc.json
     ports:
       # 8080 is held by a host service on this machine, so the UI is published on 8081.
       - "8081:8080"
@@ -54,6 +61,9 @@ services:
       - ./data:/opt/airflow/data
       # src.config locates the project root by requiring data/ and pyproject.toml side by side.
       - ./pyproject.toml:/opt/airflow/pyproject.toml:ro
+      # Application Default Credentials, mounted read-only. The host path is outside the repo
+      # and differs per OS, so it comes from ADC_PATH in .env.
+      - ${ADC_PATH}:/opt/airflow/gcp/adc.json:ro
     command: >
       bash -c "airflow db migrate &&
                (airflow users create --username admin --password admin
