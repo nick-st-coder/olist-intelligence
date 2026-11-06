@@ -8,7 +8,7 @@
 -- on both warehouses: Postgres' ``isodow`` is already 1 = Monday, while BigQuery's
 -- ``dayofweek`` is 1 = Sunday, so the BigQuery branch subtracts one.
 with spine as (
-    {{ dbt.date_spine('day', "'2016-01-01'", "'2018-12-31'") }}
+    {{ dbt.date_spine('day', "cast('2016-01-01' as date)", "cast('2018-12-31' as date)") }}
 ),
 
 normalised as (
