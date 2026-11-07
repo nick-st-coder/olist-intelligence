@@ -43,6 +43,10 @@ select
     {{ dbt.datediff('order_estimated_delivery_date', 'order_delivered_customer_date', 'day') }}
         as delay_days,
 
-    {{ dbt.datediff('order_estimated_delivery_date', 'order_delivered_customer_date', 'hour') }}
-        as delay_hours
+    -- Seconds divided by 3600, not dbt.datediff(..., 'hour'): the hour part truncates towards
+    -- zero, so an order delivered 40 minutes after the estimate yields 0 while still being
+    -- late. 53 late orders are in exactly that state on BigQuery. Seconds keep the sub-hour
+    -- resolution on both warehouses.
+    {{ dbt.datediff('order_estimated_delivery_date', 'order_delivered_customer_date', 'second') }}
+        / 3600.0 as delay_hours
 from {{ ref('stg_orders') }}
