@@ -18,7 +18,7 @@ technologies used.
 | 2 | Exploratory data analysis — business findings | ✅ Complete — [`notebooks/02_eda.ipynb`](notebooks/02_eda.ipynb) |
 | 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ✅ Complete — `src/preprocessing/`, `data/processed/orders_enriched.parquet` |
 | 4 | Data engineering — Postgres + BigQuery warehouses, dbt models and tests, Airflow | ✅ Complete — both targets build 111 tests green and reconcile to identical figures |
-| 5 | Business intelligence — Power BI dashboards, Excel report | ⬜ Planned |
+| 5 | Business intelligence — Power BI dashboards, Excel report | 🟡 In progress — measure catalogue and dashboard specs written; `.pbix` and workbook to be assembled |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ⬜ Planned |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ⬜ Planned |
 | 8 | Monitoring — Evidently drift, retraining workflow | ⬜ Planned |
