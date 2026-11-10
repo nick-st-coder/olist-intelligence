@@ -1,0 +1,73 @@
+seed: 42
+
+# Chronological split cutoffs. Boundaries are inclusive end-dates; consecutive windows, no gaps.
+# The window starts in 2017 because 2016 holds 329 orders in total (4 in Sep, 324 in Oct).
+split:
+  train_start: "2017-01-01"
+  train_end: "2018-03-31"
+  validation_end: "2018-05-31"
+  test_end: "2018-08-31"
+
+# Temporal cross-validation used for hyperparameter search, on the training window only.
+cv:
+  n_splits: 4
+  purge_days: 30
+
+# Explicit business cost matrix, in abstract cost units.
+# A late order that goes undetected costs a support contact, a refund negotiation and a
+# 1-2 star review; a false alarm costs a proactive-call or expedite decision. The ratio below
+# says a missed late order is ten times as expensive as one unnecessary alarm.
+cost:
+  false_negative: 10.0
+  false_positive: 1.0
+
+tuning:
+  n_trials: 30
+  timeout_seconds: 1200
+  # Tuned on temporal folds of the training window. The linear model is included because it is
+  # the strongest single model here, not merely a baseline.
+  models: ["logistic_regression", "lightgbm"]
+
+# Class weighting is what makes an 8% positive rate learnable, but it inflates every probability
+# by roughly the inverse of that rate. Isotonic calibration on the training window restores a
+# probability that means what it says, which the API and the dashboard both display.
+calibration:
+  enabled: true
+  method: isotonic
+  cv: 3
+
+models:
+  logistic_regression:
+    C: 0.1
+    max_iter: 2000
+  random_forest:
+    n_estimators: 400
+    max_depth: 18
+    min_samples_leaf: 20
+    max_features: "sqrt"
+  # The signal in this dataset is close to additive: a regularised linear model beats every
+  # tree ensemble on validation PR-AUC. The tree defaults below are deliberately shallow and
+  # heavily regularised, because deeper trees memorise the 2017-11 and 2018-03 late-rate spikes
+  # and generalise worse than a model that cannot represent them.
+  lightgbm:
+    n_estimators: 800
+    learning_rate: 0.02
+    num_leaves: 7
+    min_child_samples: 300
+    subsample: 0.9
+    subsample_freq: 1
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+  xgboost:
+    n_estimators: 800
+    learning_rate: 0.02
+    max_depth: 4
+    min_child_weight: 20
+    subsample: 0.9
+    colsample_bytree: 0.8
+    reg_lambda: 1.0
+
+mlflow:
+  experiment: delivery-delay
+  tracking_db: mlflow.db
+  registered_model: olist-delivery-delay
