@@ -16,6 +16,7 @@ dependencies = [
     "psycopg[binary]>=3.3.8",
     "google-cloud-storage>=3.1.1",
     "google-cloud-bigquery>=3.47.0",
+    "pyyaml>=6.0",
 ]
 
 [dependency-groups]
@@ -29,6 +30,15 @@ dev = [
     "dbt-core>=1.12.6",
     "dbt-postgres>=1.11.0",
     "dbt-bigquery>=1.12.2",
+]
+ml = [
+    "joblib>=1.4",
+    "lightgbm>=4.5",
+    "mlflow>=2.18",
+    "optuna>=4.1",
+    "scikit-learn>=1.5",
+    "shap>=0.46",
+    "xgboost>=2.1",
 ]
 
 [tool.ruff]

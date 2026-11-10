@@ -35,6 +35,8 @@ models/
 *.pkl
 *.joblib
 *.onnx
+mlflow.db
+mlflow.db-journal
 
 # dbt
 dbt/target/
