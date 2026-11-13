@@ -1,0 +1,30 @@
+# Keep the build context small and never ship data or secrets into an image.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.git/
+.github/
+
+# Never inside an image: the dataset and the derived artefacts are mounted at runtime.
+data/*.csv
+data/interim/
+data/processed/
+notebooks/
+mlruns/
+mlartifacts/
+mlflow.db
+
+# Secrets
+.env
+.env.*
+!.env.example
+*.pem
+
+# Build outputs
+dbt/target/
+dbt/logs/
+dbt/profiles.yml
+docs/

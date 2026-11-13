@@ -70,5 +70,53 @@ services:
                  --firstname Admin --lastname User --role Admin --email admin@example.com || true) &&
                airflow standalone"
 
+  # Prediction API. The model artefact and the analytical dataset are mounted rather than baked
+  # in, so retraining does not require a rebuild and the dataset stays out of the image.
+  api:
+    build:
+      context: .
+      dockerfile: docker/api.Dockerfile
+    container_name: olist-api
+    restart: unless-stopped
+    environment:
+      API_HOST: 0.0.0.0
+      API_PORT: "8000"
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "${API_PORT_HOST:-8000}:8000"
+    volumes:
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  # Prediction interface. Talks to the API over the compose network, so it needs no model.
+  app:
+    build:
+      context: .
+      dockerfile: docker/app.Dockerfile
+    container_name: olist-app
+    restart: unless-stopped
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      # Inside the compose network the service is reachable by name on its container port.
+      API_URL: http://api:8000
+      API_TIMEOUT_SECONDS: "30"
+    ports:
+      - "${STREAMLIT_PORT_HOST:-8501}:8501"
+    volumes:
+      - ./data:/app/data:ro
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8501/_stcore/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+
 volumes:
   pgdata:
