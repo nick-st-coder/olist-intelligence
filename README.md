@@ -20,14 +20,14 @@ technologies used.
 | 4 | Data engineering — Postgres + BigQuery warehouses, dbt models and tests, Airflow | ✅ Complete — both targets build 111 tests green and reconcile to identical figures |
 | 5 | Business intelligence — Power BI dashboards, Excel report | 🟡 In progress — measure catalogue and dashboard specs written; `.pbix` and workbook to be assembled |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ✅ Complete — `src/features/`, `src/modeling/`, [`notebooks/03_model_experiments.ipynb`](notebooks/03_model_experiments.ipynb) |
-| 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ⬜ Planned |
+| 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ✅ Complete — `api/`, `app/`, `src/serving/`, `docker/api.Dockerfile`, `docker/app.Dockerfile` |
 | 8 | Monitoring — Evidently drift, retraining workflow | ⬜ Planned |
 | 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
 
-Phases 1–4 and 6 are implemented: the local Postgres warehouse, the BigQuery warehouse, the dbt
-project with its tests, the Airflow DAG and the delivery-delay model are complete, and the two
-warehouses reconcile to identical figures. The `api/` and `app/` trees are still placeholders.
-This README is updated as each phase lands.
+Phases 1–4, 6 and 7 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
+dbt project with its tests, the Airflow DAG, the delivery-delay model and the prediction service
+are complete, and the two warehouses reconcile to identical figures. `src/monitoring/` is still
+an empty placeholder. This README is updated as each phase lands.
 
 ---
 
@@ -119,6 +119,8 @@ flowchart LR
     J --> K["FastAPI<br/>/predict"]
     K --> L["Streamlit UI"]
     J --> M["Evidently<br/>drift monitoring"]
+    I --> S["Serving features<br/>src/serving"]
+    S --> K
     N["Airflow<br/>dags/olist_pipeline.py"] -.orchestrates.-> B
     N -.orchestrates.-> G
 ```
@@ -147,17 +149,24 @@ olist-intelligence/
 │   │   ├── models.py         # model zoo, calibration
 │   │   ├── evaluate.py       # metrics, cost-based threshold
 │   │   ├── train.py          # experiment orchestration, MLflow
-│   │   ├── explain.py        # SHAP
+│   │   ├── explain.py        # SHAP, per-order contributions
 │   │   ├── predict.py        # scoring, risk bands
 │   │   └── __main__.py       # CLI
+│   ├── serving/
+│   │   ├── features.py       # request → feature frame
+│   │   ├── service.py        # the prediction service, framework-independent
+│   │   └── samples.py        # real orders and form options for the UI
 │   └── monitoring/           # drift.py
 ├── dbt/models/{staging,intermediate,marts}/
 ├── dags/                     # Airflow DAG
-├── api/                      # FastAPI service
+├── api/                      # FastAPI: /health, /predict, /model/info, /metrics
 ├── app/                      # Streamlit UI
 ├── tests/                    # pytest
 ├── configs/model.yaml        # splits, cost matrix, model params, MLflow
-├── docker/                   # Dockerfiles
+├── docker/
+│   ├── airflow.Dockerfile
+│   ├── api.Dockerfile        # serving group only
+│   └── app.Dockerfile        # serving group only
 ├── docker-compose.yml
 └── pyproject.toml            # single source of config (uv, ruff, pytest)
 ```
@@ -494,6 +503,145 @@ late", it is "orders like this are late about three times as often as the averag
 
 ---
 
+## Prediction service
+
+An order is scored through an HTTP API. The service loads the artefact and its scoring contract
+once at start-up and serves four endpoints.
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /health` | whether the artefact is loaded, the model version, whether explanations are available |
+| `POST /predict` | delay probability, binary decision, risk band, model version per order |
+| `GET /model/info` | model name, threshold, target definition, split boundaries, test metrics |
+| `GET /metrics` | in-process request, order and latency counters |
+
+```bash
+uv run uvicorn api.main:app --port 8000
+```
+
+`POST /predict` accepts up to 500 orders in one call:
+
+```json
+{
+  "orders": [
+    {
+      "order_purchase_timestamp": "2018-03-01T09:00:00",
+      "order_estimated_delivery_date": "2018-04-15",
+      "customer_state": "BA",
+      "seller_state": "SP",
+      "n_items": 1,
+      "item_revenue": 129.9,
+      "freight_value": 22.4,
+      "payment_value": 152.3
+    }
+  ],
+  "explain": true
+}
+```
+
+```json
+{
+  "predictions": [
+    {
+      "delay_probability": 0.1367,
+      "predicted_late": false,
+      "risk_band": "medium",
+      "model_name": "logistic_regression",
+      "model_version": "240c39f61d1b",
+      "threshold": 0.15,
+      "increases_risk": [{ "feature": "estimated_lead_days", "shap_value": 0.7788 }],
+      "decreases_risk": [{ "feature": "is_cross_state", "shap_value": -0.4745 }]
+    }
+  ],
+  "flagged": 0,
+  "model_version": "240c39f61d1b",
+  "threshold": 0.15
+}
+```
+
+Only the purchase timestamp and the promised delivery date are mandatory. Everything else is
+optional and imputed with the training median, which is why a partial checkout payload still
+scores.
+
+### The contract refuses post-purchase fields
+
+The request schema forbids unknown fields, so a caller cannot quietly send
+`order_delivered_customer_date` and have it ignored — the request is rejected with a 422 that
+names the field. This is deliberate: the field is the label, and a service that silently accepted
+it would be one refactor away from using it.
+
+There is a test for the same property from the other direction. Supplying the actual delivery
+date, the status and a review score alongside a valid payload leaves every predicted probability
+identical, because nothing in the serving path reads those columns.
+
+### One feature path, not two
+
+The most likely way a deployed model goes wrong is silently diverging from its training
+preprocessing: the service derives a feature slightly differently, the model sees a distribution
+it never fitted, and the predictions degrade without any error being raised.
+
+The service therefore does not re-implement the derivations. It calls the same
+`add_purchase_time_features` and `haversine_km` functions the batch pipeline uses, and
+`tests/test_serving.py` asserts that the same orders produce identical feature frames down both
+paths — every column, one at a time.
+
+### Seller history at serving time
+
+The seller history features need a completion timeline built from every delivered order in the
+dataset. That build costs about half a second and nothing in it changes between requests, so it
+happens once at start-up. A new order then attaches the seller's record as of the instant it was
+placed, through the same as-of merge the training code uses.
+
+Without the dataset the service still runs: the history columns fall back to their imputed values
+and `seller_has_history` is false. Losing the data degrades the features, it does not take the
+service down.
+
+### Explanations
+
+`explain=true` adds the factors that moved each score. Contributions are SHAP values in
+log-odds, grouped from the one-hot columns back onto the source feature, so the answer names
+`customer_state` rather than `customer_state_SP`.
+
+An explanation of a single order needs a **reference distribution** to compare against. Passing
+the row being explained as its own baseline produces Shapley values of exactly zero, because
+nothing deviates from itself — a failure that is silent, since a table of zeros looks like a
+weak-but-valid answer. The service instead samples 2,000 rows of delivered history as the
+baseline and asserts additivity: the contributions plus the base value must reconstruct the
+model's decision function for that order.
+
+Explaining costs roughly 100 ms per order, so it is opt-in rather than the default.
+
+### Interface
+
+```bash
+uv run streamlit run app/streamlit_app.py
+```
+
+The dashboard builds an order from a form — purchase date, promised lead time, route states,
+basket — posts it to the API and shows the probability, the risk band and the two contribution
+tables. Real orders from the dataset can be loaded into the form as a starting point.
+
+It talks HTTP rather than importing the model, so it demonstrates the same contract an external
+caller uses and can be pointed at a deployment with the `API_URL` environment variable.
+
+### Containers
+
+```bash
+# API and interface, alongside the existing Postgres and Airflow services
+docker compose up --build api app
+```
+
+`api` serves on port 8000 and `app` on 8501. The image installs the `serving` dependency group
+only — the training stack (LightGBM, XGBoost, Optuna, MLflow) and the cloud clients are not
+needed to score an order. The model artefact and the analytical dataset are mounted at runtime
+rather than baked in, so retraining does not require a rebuild.
+
+Both services declare health checks. `app` waits for `api` to report healthy before starting, and
+`api` reports `degraded` from `/health` — with a 503 from `/predict` — if its artefact is missing,
+rather than failing on the first request.
+
+---
+
 ## Tech stack
 
 | Area | Tools |
@@ -518,7 +666,7 @@ git clone https://github.com/nick-st-coder/olist-intelligence.git
 cd olist-intelligence
 
 # install dependencies (creates .venv)
-uv sync
+uv sync --all-groups
 
 # download the 9 CSVs from Kaggle into data/ (see Dataset above)
 
@@ -528,6 +676,14 @@ uv run pytest
 # lint and format
 uv run ruff check .
 uv run ruff format .
+```
+
+To serve predictions, the model must exist first — `uv run python -m src.modeling train` writes
+the artefact the service loads. The two web services then start independently:
+
+```bash
+uv run uvicorn api.main:app --port 8000     # prediction API
+uv run streamlit run app/streamlit_app.py   # interface, expects API_URL
 ```
 
 To run the Phase 1 notebook, open `notebooks/01_data_understanding.ipynb` and select the
@@ -552,14 +708,19 @@ working directory.
 
 ## Limitations
 
-- The dataset is **historical and static** (2016-09 → 2018-10). Monitoring and retraining in
-  Phase 8 use **simulated** incoming batches and delayed labels, and are labelled as simulated.
+- The dataset is **historical and static** (2016-09 → 2018-10). Monitoring and retraining use
+  **simulated** incoming batches and delayed labels, and are labelled as simulated.
 - The observation window is not uniformly dense: 2016 and Sep–Oct 2018 are too thin for
-  training, so chronological splits will run **2017-01 → 2018-08**.
+  training, so chronological splits run **2017-01 → 2018-08**.
 - `geolocation` is a sample of observed coordinates, so any distance feature is an
   approximation based on one representative point per ZIP prefix.
-- The late-delivery label is sensitive to the date-only estimate (see Phase 1 findings #1).
-  The chosen convention will be documented here once Phase 3 fixes it.
+- The late-delivery label compares against a **date-only** estimate, so a delivery on the
+  estimated day counts as late. That reclassifies 1,292 orders and gives a late rate of 8.11%
+  rather than 6.77%. The end-of-day reading is kept as a sensitivity check, not as the label.
+- The label measures a **promise**, not a delivery time, and the process that sets the estimate
+  is not in the data. This caps what the model can achieve — see *Reading the result honestly*.
+- The service scores one order at a time and holds the model in process memory. A multi-instance
+  deployment would need the artefact in a shared registry rather than on a mounted volume.
 
 ---
 
