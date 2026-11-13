@@ -37,11 +37,48 @@ def _unwrap(estimator):
     return estimator
 
 
-def _explainer(pipeline, background: pd.DataFrame):
+#: Rows in the reference distribution handed to SHAP. The default masker subsamples to 100
+#: anyway; being explicit avoids the warning and makes the sampling reproducible.
+BACKGROUND_ROWS = 200
+
+
+def _explainer(pipeline, background: pd.DataFrame, *, max_samples: int = 100):
+    """Build an explainer over a **reference distribution**, not over the row being explained.
+
+    ``background`` must be a sample of rows the model was fitted on. Passing the single row
+    whose contribution is wanted makes every Shapley value exactly zero — the row is its own
+    baseline, so nothing deviates from it. Linear models are the case where this fails silently.
+    """
     model = _unwrap(pipeline.named_steps["model"])
     if hasattr(model, "feature_importances_"):
         return shap.TreeExplainer(model)
-    return shap.LinearExplainer(model, background)
+    masker = shap.maskers.Independent(background, max_samples=max_samples)
+    return shap.LinearExplainer(model, masker)
+
+
+def _background_matrix(
+    pipeline,
+    features: pd.DataFrame,
+    row_index: int,
+    background: pd.DataFrame | None,
+    rows: int,
+    seed: int,
+) -> pd.DataFrame:
+    """Transformed reference rows used as the SHAP baseline.
+
+    An explicit ``background`` wins. Otherwise the pool is sampled from ``features`` with the
+    explained row removed, which is only meaningful when the caller passed a multi-row frame.
+    """
+    if background is not None:
+        return _transformed(pipeline, background)
+
+    pool = features.drop(index=[row_index], errors="ignore")
+    if pool.empty:
+        raise ValueError(
+            "a per-order explanation needs a reference distribution; pass background=<frame> "
+            "with rows the model was fitted on"
+        )
+    return _transformed(pipeline, pool.sample(min(rows, len(pool)), random_state=seed))
 
 
 def global_importance(
@@ -87,7 +124,7 @@ def grouped_importance(importance: pd.DataFrame) -> pd.DataFrame:
     by pattern, because a state code and a category name are indistinguishable by shape.
     """
     frame = importance.copy()
-    frame["group"] = frame["feature"].map(_source_feature)
+    frame["group"] = frame["feature"].map(source_feature)
     grouped = (
         frame.groupby("group", as_index=False)["mean_abs_shap"]
         .sum()
@@ -97,7 +134,7 @@ def grouped_importance(importance: pd.DataFrame) -> pd.DataFrame:
     return grouped
 
 
-def _source_feature(name: str) -> str:
+def source_feature(name: str) -> str:
     """Map a transformed column name back to the feature it came from."""
     stripped = name.split("__", 1)[-1]
     for categorical in CATEGORICAL_FEATURES:
@@ -106,21 +143,24 @@ def _source_feature(name: str) -> str:
     return stripped
 
 
-def explain_row(
+def row_contributions(
     pipeline,
     features: pd.DataFrame,
     row_index: int,
     *,
-    top_k: int = 10,
+    background: pd.DataFrame | None = None,
+    background_rows: int = BACKGROUND_ROWS,
+    seed: int = 42,
 ) -> pd.DataFrame:
-    """Per-order contribution table in log-odds, largest absolute first.
+    """Every transformed column's contribution to one order's score, in log-odds.
 
-    Positive contributions push the order towards "late"; negative ones push it towards
-    "on time".
+    Contributions are additive: they plus the explainer's base value reconstruct the model's
+    decision function for this row. That identity is what makes the numbers presentable.
     """
     sample = features.loc[[row_index]]
     matrix = _transformed(pipeline, sample)
-    explainer = _explainer(pipeline, matrix)
+    baseline = _background_matrix(pipeline, features, row_index, background, background_rows, seed)
+    explainer = _explainer(pipeline, baseline, max_samples=len(baseline))
 
     values = explainer.shap_values(matrix)
     if isinstance(values, list):
@@ -131,18 +171,60 @@ def explain_row(
 
     frame = pd.DataFrame(
         {
-            "feature": matrix.columns,
+            "feature": list(matrix.columns),
             "value": matrix.iloc[0].to_numpy(),
             "shap_value": values[0],
         }
+    )
+    frame["source_feature"] = frame["feature"].map(source_feature)
+    return frame
+
+
+def explain_row(
+    pipeline,
+    features: pd.DataFrame,
+    row_index: int,
+    *,
+    background: pd.DataFrame | None = None,
+    background_rows: int = BACKGROUND_ROWS,
+    seed: int = 42,
+    top_k: int = 10,
+) -> pd.DataFrame:
+    """Per-order contribution table in log-odds, largest absolute first.
+
+    Positive contributions push the order towards "late"; negative ones push it towards
+    "on time".
+    """
+    frame = row_contributions(
+        pipeline,
+        features,
+        row_index,
+        background=background,
+        background_rows=background_rows,
+        seed=seed,
     )
     frame["abs_shap"] = frame["shap_value"].abs()
     return (
         frame.sort_values("abs_shap", ascending=False)
         .head(top_k)
-        .drop(columns="abs_shap")
+        .drop(columns=["abs_shap", "source_feature"])
         .reset_index(drop=True)
     )
+
+
+def _grouped_contributions(contributions: pd.DataFrame) -> pd.DataFrame:
+    """Sum one-hot contributions back onto their source feature.
+
+    ``customer_state_SP`` and its 26 siblings collapse into a single ``customer_state`` term, so
+    the explanation names a business input rather than a one-hot level.
+    """
+    grouped = (
+        contributions.groupby("source_feature", as_index=False)["shap_value"]
+        .sum()
+        .rename(columns={"source_feature": "feature"})
+    )
+    grouped["abs_shap"] = grouped["shap_value"].abs()
+    return grouped.sort_values("abs_shap", ascending=False, ignore_index=True)
 
 
 def decision_explanation(
@@ -151,18 +233,29 @@ def decision_explanation(
     row_index: int,
     *,
     threshold: float,
+    background: pd.DataFrame | None = None,
+    background_rows: int = BACKGROUND_ROWS,
+    seed: int = 42,
     top_k: int = 5,
 ) -> dict:
     """A single prediction with the few contributions that drove it, in business language."""
     probability = float(pipeline.predict_proba(features.loc[[row_index]])[:, 1][0])
-    contributions = explain_row(pipeline, features, row_index, top_k=top_k)
-    pushing_late = contributions[contributions["shap_value"] > 0].head(top_k)
-    pushing_ontime = contributions[contributions["shap_value"] < 0].head(top_k)
+    contributions = row_contributions(
+        pipeline,
+        features,
+        row_index,
+        background=background,
+        background_rows=background_rows,
+        seed=seed,
+    )
+    grouped = _grouped_contributions(contributions)
+    pushing_late = grouped[grouped["shap_value"] > 0].head(top_k)
+    pushing_ontime = grouped[grouped["shap_value"] < 0].head(top_k)
 
     return {
         "probability": probability,
         "threshold": threshold,
         "predicted_late": probability >= threshold,
-        "increases_risk": pushing_late[["feature", "shap_value"]].to_dict("records"),
-        "decreases_risk": pushing_ontime[["feature", "shap_value"]].to_dict("records"),
+        "increases_risk": pushing_late[["feature", "shap_value"]].round(6).to_dict("records"),
+        "decreases_risk": pushing_ontime[["feature", "shap_value"]].round(6).to_dict("records"),
     }
