@@ -54,23 +54,65 @@ def add_seller_history_features(
     if missing:
         raise KeyError(f"order-level dataset missing columns: {sorted(missing)}")
 
-    out = order_level.copy()
-    out["_row_id"] = np.arange(len(out))
-
-    completion = _completion_timeline(
-        out, seller_column, purchase_column, delivered_column, label_column
+    completion = build_completion_timeline(
+        order_level,
+        seller_column=seller_column,
+        purchase_column=purchase_column,
+        delivered_column=delivered_column,
+        label_column=label_column,
     )
-    stats = _as_of_purchase(out, completion, seller_column, purchase_column)
-
-    for col in (*HISTORY_FEATURES, _HISTORY_FLAG):
-        out[col] = stats[col].to_numpy()
+    out = attach_seller_history(
+        order_level,
+        completion,
+        seller_column=seller_column,
+        purchase_column=purchase_column,
+    )
 
     logger.info(
         "seller history: %s of %s orders have at least one completed prior order by the same seller",
         f"{int(out[_HISTORY_FLAG].sum()):,}",
         f"{len(out):,}",
     )
-    return out.drop(columns=["_row_id"])
+    return out
+
+
+def build_completion_timeline(
+    order_level: pd.DataFrame,
+    *,
+    seller_column: str = SELLER_COLUMN,
+    purchase_column: str = PURCHASE_COLUMN,
+    delivered_column: str = DELIVERED_COLUMN,
+    label_column: str = LABEL_COLUMN,
+) -> pd.DataFrame:
+    """The reusable half of :func:`add_seller_history_features`.
+
+    Building the timeline is the expensive step and it depends only on completed orders, so a
+    caller that scores many new orders can build it once and reuse it across batches — which is
+    what the prediction service does at start-up.
+    """
+    return _completion_timeline(
+        order_level, seller_column, purchase_column, delivered_column, label_column
+    )
+
+
+def attach_seller_history(
+    df: pd.DataFrame,
+    completion: pd.DataFrame,
+    *,
+    seller_column: str = SELLER_COLUMN,
+    purchase_column: str = PURCHASE_COLUMN,
+) -> pd.DataFrame:
+    """Attach the as-of-purchase seller statistics from a prebuilt completion timeline.
+
+    Works on any frame that carries a seller column and a purchase timestamp — training rows or
+    a batch of orders awaiting a prediction. Rows whose seller has no completed order keep
+    ``prior_orders = 0``, ``NaN`` rates and ``seller_has_history = False``.
+    """
+    stats = _as_of_purchase(df, completion, seller_column, purchase_column)
+    out = df.copy()
+    for col in (*HISTORY_FEATURES, _HISTORY_FLAG):
+        out[col] = stats[col].to_numpy()
+    return out
 
 
 def _completion_timeline(
@@ -134,10 +176,29 @@ def _as_of_purchase(
     seller_column: str,
     purchase_column: str,
 ) -> pd.DataFrame:
-    """Attach the most recent completion strictly before each purchase timestamp."""
+    """Attach the most recent completion strictly before each purchase timestamp.
+
+    Returns one row per input row, aligned to ``df.index``. The row identity is carried through a
+    private column because ``merge_asof`` reorders its output by the merge key.
+    """
+    if completion.empty or df.empty:
+        empty = pd.DataFrame(index=df.index)
+        empty["seller_prior_orders"] = 0.0
+        empty["seller_prior_late_rate"] = np.nan
+        empty["seller_prior_mean_delivery_days"] = np.nan
+        empty[_HISTORY_FLAG] = False
+        return empty
+
+    row_ids = np.arange(len(df))
     left = (
-        df[["_row_id", seller_column, purchase_column]]
-        .rename(columns={seller_column: "seller_id"})
+        pd.DataFrame(
+            {
+                "_row_id": row_ids,
+                "seller_id": df[seller_column].to_numpy(),
+                purchase_column: df[purchase_column].to_numpy(),
+            },
+            index=df.index,
+        )
         .dropna(subset=["seller_id", purchase_column])
         .sort_values(purchase_column, kind="mergesort")
     )
@@ -159,9 +220,19 @@ def _as_of_purchase(
     )
 
     merged = merged.rename(columns={"cum_orders": "seller_prior_orders"})
-    merged = merged.set_index("_row_id").reindex(df["_row_id"].to_numpy())
+    # Restore the caller's row order: merge_asof sorts by the merge key and drops non-matching
+    # rows, so rows are realigned positionally through the private id.
+    merged = merged.set_index("_row_id").reindex(row_ids)
+    merged.index = df.index
 
     # Rows with no seller (or no purchase timestamp) never matched, so they have no history.
     merged["seller_prior_orders"] = merged["seller_prior_orders"].fillna(0.0)
     merged[_HISTORY_FLAG] = merged["seller_prior_orders"] > 0
-    return merged
+    return merged[
+        [
+            "seller_prior_orders",
+            "seller_prior_late_rate",
+            "seller_prior_mean_delivery_days",
+            _HISTORY_FLAG,
+        ]
+    ]

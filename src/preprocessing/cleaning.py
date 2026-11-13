@@ -89,12 +89,13 @@ def add_delivery_label(orders: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
-def add_lead_time_features(orders: pd.DataFrame) -> pd.DataFrame:
-    """Add purchase-time-knowable temporal features.
+def add_purchase_time_features(orders: pd.DataFrame) -> pd.DataFrame:
+    """Add the fields knowable at checkout: the calendar block and the promised lead time.
 
-    Only ``estimated_lead_days`` is safe for the model: it is ``estimate - purchase``, both known
-    at purchase. ``delivery_days`` is post-purchase and exists for diagnostics only — it is in
-    :data:`src.config.FORBIDDEN_FEATURES`.
+    ``estimated_lead_days`` is ``estimate - purchase``, both known at purchase, so it is legal as
+    a model input. This function is the single implementation of that derivation — the batch
+    pipeline and the prediction service both call it, so a scored order is built the same way as
+    a trained one.
     """
     out = orders.copy()
     purchase = out["order_purchase_timestamp"]
@@ -106,6 +107,18 @@ def add_lead_time_features(orders: pd.DataFrame) -> pd.DataFrame:
     out["purchase_is_weekend"] = purchase.dt.day_of_week >= 5
 
     out["estimated_lead_days"] = (out["order_estimated_delivery_date"] - purchase).dt.days
+    return out
+
+
+def add_lead_time_features(orders: pd.DataFrame) -> pd.DataFrame:
+    """Add the purchase-time features plus post-purchase diagnostics.
+
+    Only ``estimated_lead_days`` and the calendar block are safe for the model. ``delivery_days``
+    and the delay columns are outcomes and exist for diagnostics only — they are in
+    :data:`src.config.FORBIDDEN_FEATURES`.
+    """
+    out = add_purchase_time_features(orders)
+    purchase = out["order_purchase_timestamp"]
 
     # Diagnostics only — never a feature.
     out["delivery_days"] = (out["order_delivered_customer_date"] - purchase).dt.days
