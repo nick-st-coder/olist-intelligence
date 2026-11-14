@@ -1,0 +1,160 @@
+name: Data CI
+
+# End-to-end warehouse validation with the real dataset.
+#
+# The dataset is not versioned, so this workflow downloads it from Kaggle (120 MB) and then
+# runs the data-dependent quality gates the fast CI job cannot: the full pytest suite, the
+# raw-to-warehouse load, dbt build with its 100+ tests, and a final row-count check on the
+# marts. It needs Kaggle credentials, so it runs manually or on PRs whose changes touch the
+# pipeline.
+#
+# Credentials come from the KAGGLE_USERNAME and KAGGLE_KEY secrets, or from the workflow_dispatch
+# inputs. The dataset is public and the checks only assert row counts and schema invariants, so
+# no derived data is stored in the repository.
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "src/ingestion/**"
+      - "src/validation/**"
+      - "src/preprocessing/**"
+      - "dbt/**"
+      - "tests/**"
+      - "pyproject.toml"
+      - "uv.lock"
+      - ".github/workflows/data-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: data-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  warehouse:
+    name: Warehouse build and data tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: olist
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: olist
+        ports:
+          - 5432:5432
+        # Docker defaults /dev/shm to 64 MB, which is too small for Postgres parallel workers;
+        # the fact_orders build fails with "could not resize shared memory segment".
+        options: >-
+          --health-cmd "pg_isready -U olist -d olist"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Configure Kaggle credentials
+        env:
+          KAGGLE_USERNAME: ${{ secrets.KAGGLE_USERNAME }}
+          KAGGLE_KEY: ${{ secrets.KAGGLE_KEY }}
+        run: |
+          if [[ -z "$KAGGLE_USERNAME" || -z "$KAGGLE_KEY" ]]; then
+            echo "::error::Set the KAGGLE_USERNAME and KAGGLE_KEY repository secrets to run the data pipeline."
+            exit 1
+          fi
+          mkdir -p ~/.kaggle
+          printf '{"username":"%s","key":"%s"}\n' "$KAGGLE_USERNAME" "$KAGGLE_KEY" > ~/.kaggle/kaggle.json
+          chmod 600 ~/.kaggle/kaggle.json
+
+      - name: Download the raw dataset
+        run: |
+          uv run pip install --quiet kaggle
+          uv run kaggle datasets download -d olistbr/brazilian-ecommerce -p data/ --unzip
+
+      - name: Verify all nine raw files landed
+        run: |
+          python -c "
+          import pathlib
+          expected = {
+            'olist_orders_dataset.csv',
+            'olist_order_items_dataset.csv',
+            'olist_order_payments_dataset.csv',
+            'olist_order_reviews_dataset.csv',
+            'olist_customers_dataset.csv',
+            'olist_sellers_dataset.csv',
+            'olist_products_dataset.csv',
+            'olist_geolocation_dataset.csv',
+            'product_category_name_translation.csv',
+          }
+          got = {p.name for p in pathlib.Path('data').glob('*.csv')}
+          missing = expected - got
+          if missing:
+              raise SystemExit(f'missing raw files: {sorted(missing)}')
+          print(f'{len(got)} raw files verified')
+          "
+
+      - name: Run the full test suite
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: olist
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: olist
+        run: uv run pytest
+
+      - name: Load the raw CSVs into Postgres
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: olist
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: olist
+        run: uv run python -m src.ingestion.load_postgres
+
+      - name: Prepare dbt profiles
+        run: |
+          mkdir -p "$HOME/.dbt"
+          cp dbt/profiles.yml.example "$HOME/.dbt/profiles.yml"
+
+      - name: Build the warehouse and run dbt tests
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: olist
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: olist
+        run: uv run dbt build --project-dir dbt --profiles-dir "$HOME/.dbt"
+
+      - name: Verify the warehouse marts
+        env:
+          POSTGRES_HOST: localhost
+          POSTGRES_PORT: "5432"
+          POSTGRES_USER: olist
+          POSTGRES_PASSWORD: change_me
+          POSTGRES_DB: olist
+        run: |
+          uv run python -c "
+          import os
+          from sqlalchemy import create_engine, text
+          engine = create_engine(
+              'postgresql+psycopg://{user}:{pw}@{host}:{port}/{db}'.format(
+                  user=os.environ['POSTGRES_USER'], pw=os.environ['POSTGRES_PASSWORD'],
+                  host=os.environ['POSTGRES_HOST'], port=os.environ['POSTGRES_PORT'],
+                  db=os.environ['POSTGRES_DB']))
+          expected = {'fact_orders': 99441, 'fact_order_items': 112650, 'dim_customers': 99441,
+                      'dim_products': 32951, 'dim_sellers': 3095}
+          with engine.connect() as conn:
+              for table, want in expected.items():
+                  got = conn.execute(text(f'select count(*) from analytics.{table}')).scalar()
+                  assert got == want, f'{table}: expected {want:,}, got {got:,}'
+                  print(f'{table}: {got:,} rows ✓')
+          print('all marts match the expected grain')
+          "
