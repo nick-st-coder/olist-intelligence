@@ -54,9 +54,7 @@ jobs:
           mkdir -p "$HOME/.dbt"
           cp dbt/profiles.yml.example "$HOME/.dbt/profiles.yml"
       - name: Validate dbt project
-        env:
-          DBT_PROFILES_DIR: "$HOME/.dbt"
-        run: uv run dbt parse --project-dir dbt
+        run: uv run dbt parse --project-dir dbt --profiles-dir "$HOME/.dbt"
 
   docker:
     name: Build images
