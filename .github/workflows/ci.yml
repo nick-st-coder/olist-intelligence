@@ -1,0 +1,62 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Ruff check
+        run: uv run ruff check .
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Run tests
+        run: uv run pytest
+      - name: Verify lockfile is current
+        run: uv lock --check
+
+  dbt:
+    name: dbt parse
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.11"
+      - name: Install dependencies
+        run: uv sync --all-groups
+      - name: Validate dbt project
+        run: uv run dbt parse --project-dir dbt
+
+  docker:
+    name: Build images
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build API image
+        run: docker build -f docker/api.Dockerfile -t olist-api:ci .
+      - name: Build app image
+        run: docker build -f docker/app.Dockerfile -t olist-app:ci .

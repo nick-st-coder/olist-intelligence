@@ -8,6 +8,8 @@ The project is built **local-first** (Docker Compose, PostgreSQL, Airflow) with 
 optional deployment target. Correctness and reproducibility take priority over the number of
 technologies used.
 
+[![CI](https://github.com/nick-st-coder/olist-intelligence/actions/workflows/ci.yml/badge.svg)](https://github.com/nick-st-coder/olist-intelligence/actions/workflows/ci.yml)
+
 ---
 
 ## Status
@@ -22,12 +24,12 @@ technologies used.
 | 6 | Machine learning — delivery-delay model, MLflow registry | ✅ Complete — `src/features/`, `src/modeling/`, [`notebooks/03_model_experiments.ipynb`](notebooks/03_model_experiments.ipynb) |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ✅ Complete — `api/`, `app/`, `src/serving/`, `docker/api.Dockerfile`, `docker/app.Dockerfile` |
 | 8 | Monitoring — Evidently drift, retraining workflow | ✅ Complete — simulated monthly drift, delayed-label performance, gated MLflow registration |
-| 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
+| 9 | CI/CD & documentation — GitHub Actions | ✅ Complete — `.github/workflows/ci.yml` (lint, test, dbt parse, image build) |
 
-Phases 1–8 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
+Phases 1–9 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
 dbt project with its tests, the Airflow DAG, the delivery-delay model, the prediction service,
-the Power BI report and simulated monitoring workflow are complete, and the two warehouses
-reconcile to identical figures.
+the Power BI report, the simulated monitoring workflow and the CI pipeline are complete, and
+the two warehouses reconcile to identical figures.
 
 ---
 
@@ -677,6 +679,30 @@ rather than baked in, so retraining does not require a rebuild.
 Both services declare health checks. `app` waits for `api` to report healthy before starting, and
 `api` reports `degraded` from `/health` — with a 503 from `/predict` — if its artefact is missing,
 rather than failing on the first request.
+
+---
+
+## Continuous integration
+
+Every push to `main` and every pull request runs `.github/workflows/ci.yml`, which checks the
+four things that would otherwise fail silently:
+
+| Job | What it runs | Catches |
+|-----|--------------|---------|
+| `lint` | `uv run ruff check .` | style, unused imports, import order |
+| `test` | `uv run pytest` then `uv lock --check` | regressions and a lockfile that drifted from `pyproject.toml` |
+| `dbt` | `uv run dbt parse --project-dir dbt` | a dbt project that no longer compiles |
+| `docker` | builds `docker/api.Dockerfile` and `docker/app.Dockerfile` | a Dockerfile that no longer builds |
+
+The test job needs no data or model artefact: the API and serving tests skip cleanly when the
+artefact is absent, and the monitoring tests use synthetic frames. The dbt job validates the
+project offline with `dbt parse`, so it needs no database. The image builds are the only job
+that requires Docker, and they run on GitHub's hosted runners.
+
+The project is deliberately **local-first**, so there is no deploy step: the images are built to
+prove they compile, not pushed to a registry. Cloud Run was considered and set aside — the
+platform runs locally via Docker Compose, and a deployment target can be added later without
+changing the pipeline.
 
 ---
 
