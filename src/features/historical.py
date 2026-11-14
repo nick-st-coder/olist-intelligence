@@ -202,11 +202,13 @@ def _as_of_purchase(
         .dropna(subset=["seller_id", purchase_column])
         .sort_values(purchase_column, kind="mergesort")
     )
+    left[purchase_column] = pd.to_datetime(left[purchase_column], utc=True).dt.as_unit("ns")
     # merge_asof requires identical key dtypes; the order-level frame may carry an Arrow string
     # column while the completion timeline is object-typed.
     left["seller_id"] = left["seller_id"].astype("object")
 
     right = completion.sort_values("completed_at", kind="mergesort").copy()
+    right["completed_at"] = pd.to_datetime(right["completed_at"], utc=True).dt.as_unit("ns")
     right["seller_id"] = right["seller_id"].astype("object")
 
     merged = pd.merge_asof(

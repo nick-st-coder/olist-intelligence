@@ -45,6 +45,21 @@ def test_history_counts_only_orders_completed_before_the_purchase() -> None:
     assert out.loc[1, "seller_prior_late_rate"] == 0.0
 
 
+def test_history_join_accepts_different_datetime_resolutions() -> None:
+    df = _orders(
+        [
+            ("S1", "2017-01-01", "2017-01-10", 0),
+            ("S1", "2017-02-01", "2017-02-15", 1),
+        ]
+    )
+    df[DELIVERED] = df[DELIVERED].astype("datetime64[us]")
+
+    out = add_seller_history_features(df)
+
+    assert out.loc[1, "seller_prior_orders"] == 1
+    assert out.loc[1, "seller_prior_late_rate"] == 0.0
+
+
 def test_an_order_still_in_transit_is_not_history() -> None:
     # A is purchased first but delivered *after* B is placed, so B must not see it.
     df = _orders(
