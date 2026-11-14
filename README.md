@@ -18,16 +18,16 @@ technologies used.
 | 2 | Exploratory data analysis — business findings | ✅ Complete — [`notebooks/02_eda.ipynb`](notebooks/02_eda.ipynb) |
 | 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ✅ Complete — `src/preprocessing/`, `data/processed/orders_enriched.parquet` |
 | 4 | Data engineering — Postgres + BigQuery warehouses, dbt models and tests, Airflow | ✅ Complete — both targets build 111 tests green and reconcile to identical figures |
-| 5 | Business intelligence — Power BI dashboards, Excel report | 🟡 In progress — measure catalogue and dashboard specs written; `.pbix` and workbook to be assembled |
+| 5 | Business intelligence — Power BI dashboards, Excel report | ✅ Complete — `powerbi/` (PBIP: TMDL model + 3-page report), 20/20 measures validated |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ✅ Complete — `src/features/`, `src/modeling/`, [`notebooks/03_model_experiments.ipynb`](notebooks/03_model_experiments.ipynb) |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ✅ Complete — `api/`, `app/`, `src/serving/`, `docker/api.Dockerfile`, `docker/app.Dockerfile` |
 | 8 | Monitoring — Evidently drift, retraining workflow | ⬜ Planned |
 | 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
 
-Phases 1–4, 6 and 7 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
-dbt project with its tests, the Airflow DAG, the delivery-delay model and the prediction service
-are complete, and the two warehouses reconcile to identical figures. `src/monitoring/` is still
-an empty placeholder. This README is updated as each phase lands.
+Phases 1–7 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
+dbt project with its tests, the Airflow DAG, the delivery-delay model, the prediction service
+and the Power BI report are complete, and the two warehouses reconcile to identical figures.
+`src/monitoring/` is still an empty placeholder. This README is updated as each phase lands.
 
 ---
 

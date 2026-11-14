@@ -1,0 +1,494 @@
+table fact_orders
+	lineageTag: 7a1b0001-0000-4000-8000-000000000001
+
+	measure 'Total Orders' = COUNTROWS ( fact_orders )
+		formatString: #,0
+		lineageTag: 7a1b0002-0001-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Eligible Orders' = CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[is_label_eligible] = TRUE )
+		formatString: #,0
+		lineageTag: 7a1b0002-0002-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Total Revenue' = SUM ( fact_orders[item_revenue] )
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0002-0003-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Total Freight' = SUM ( fact_orders[freight_value] )
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0002-0004-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Average Order Value' = DIVIDE ( [Total Revenue], [Total Orders] )
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0002-0005-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Freight Share of Revenue' = DIVIDE ( [Total Freight], [Total Revenue] )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0006-4000-8000-000000000001
+
+	measure 'Late Orders' = CALCULATE ( COUNTROWS ( fact_orders ), fact_orders[is_late] = TRUE )
+		formatString: #,0
+		lineageTag: 7a1b0002-0007-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Late Rate %' = DIVIDE ( [Late Orders], [Eligible Orders] )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0008-4000-8000-000000000001
+
+	measure 'Average Delivery Days' = CALCULATE ( AVERAGE ( fact_orders[delivery_days] ), fact_orders[is_label_eligible] = TRUE )
+		formatString: 0.00
+		lineageTag: 7a1b0002-0009-4000-8000-000000000001
+
+	measure 'Average Estimated Lead Days' = AVERAGE ( fact_orders[estimated_lead_days] )
+		formatString: 0.00
+		lineageTag: 7a1b0002-0010-4000-8000-000000000001
+
+	measure 'Average Delay Days (late only)' = CALCULATE ( AVERAGE ( fact_orders[delay_days] ), fact_orders[is_late] = TRUE )
+		formatString: 0.00
+		lineageTag: 7a1b0002-0011-4000-8000-000000000001
+
+	measure 'On Time Rate %' = 1 - [Late Rate %]
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0012-4000-8000-000000000001
+
+	measure 'Unique Customers' = DISTINCTCOUNT ( fact_orders[customer_unique_id] )
+		formatString: #,0
+		lineageTag: 7a1b0002-0013-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Orders per Customer' = DIVIDE ( [Total Orders], [Unique Customers] )
+		formatString: 0.000
+		lineageTag: 7a1b0002-0014-4000-8000-000000000001
+
+	measure 'Repeat Customers' =
+			COUNTROWS (
+			    FILTER (
+			        VALUES ( fact_orders[customer_unique_id] ),
+			        CALCULATE ( COUNTROWS ( fact_orders ) ) > 1
+			    )
+			)
+		formatString: #,0
+		lineageTag: 7a1b0002-0015-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Repeat Purchase Rate %' = DIVIDE ( [Repeat Customers], [Unique Customers] )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0016-4000-8000-000000000001
+
+	measure 'Revenue per Customer' = DIVIDE ( [Total Revenue], [Unique Customers] )
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0002-0017-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Average Review Score' = AVERAGE ( fact_orders[review_score] )
+		formatString: 0.000
+		lineageTag: 7a1b0002-0018-4000-8000-000000000001
+
+	measure 'Low Score Orders' =
+			CALCULATE (
+			    COUNTROWS ( fact_orders ),
+			    fact_orders[review_score] <= 2,
+			    NOT ISBLANK ( fact_orders[review_score] )
+			)
+		formatString: #,0
+		lineageTag: 7a1b0002-0019-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Low Score Rate %' = DIVIDE ( [Low Score Orders], COUNTROWS ( fact_orders ) )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0020-4000-8000-000000000001
+
+	measure 'Revenue MoM %' =
+			VAR Current = [Total Revenue]
+			VAR Prior =
+			    CALCULATE ( [Total Revenue], DATEADD ( dim_date[date_day], -1, MONTH ) )
+			RETURN
+			    DIVIDE ( Current - Prior, Prior )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0021-4000-8000-000000000001
+
+	measure 'Revenue YoY %' =
+			VAR Current = [Total Revenue]
+			VAR Prior =
+			    CALCULATE ( [Total Revenue], SAMEPERIODLASTYEAR ( dim_date[date_day] ) )
+			RETURN
+			    DIVIDE ( Current - Prior, Prior )
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0022-4000-8000-000000000001
+
+	measure 'Revenue 3M Rolling' =
+			CALCULATE (
+			    [Total Revenue],
+			    DATESINPERIOD ( dim_date[date_day], MAX ( dim_date[date_day] ), -3, MONTH )
+			)
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0002-0023-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Late Rate 3M Rolling' =
+			CALCULATE (
+			    [Late Rate %],
+			    DATESINPERIOD ( dim_date[date_day], MAX ( dim_date[date_day] ), -3, MONTH )
+			)
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0002-0024-4000-8000-000000000001
+
+	column order_id
+		dataType: string
+		lineageTag: 7a1b0001-0001-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_id
+		dataType: string
+		lineageTag: 7a1b0001-0002-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_status
+		dataType: string
+		lineageTag: 7a1b0001-0003-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_purchase_timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 7a1b0001-0004-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_purchase_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date = DATE ( YEAR ( fact_orders[order_purchase_timestamp] ), MONTH ( fact_orders[order_purchase_timestamp] ), DAY ( fact_orders[order_purchase_timestamp] ) )
+		formatString: Short Date
+		lineageTag: 7a1b0001-0005-4000-8000-000000000001
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_estimated_delivery_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 7a1b0001-0006-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_estimated_delivery_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column item_revenue
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0001-0007-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: item_revenue
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column freight_value
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0001-0008-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column n_items
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0009-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: n_items
+
+		annotation SummarizationSetBy = Automatic
+
+	column n_sellers
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0010-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: n_sellers
+
+		annotation SummarizationSetBy = Automatic
+
+	column n_products
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0011-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: n_products
+
+		annotation SummarizationSetBy = Automatic
+
+	column max_item_price
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0001-0012-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: max_item_price
+
+		annotation SummarizationSetBy = Automatic
+
+	column min_item_price
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0001-0013-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: min_item_price
+
+		annotation SummarizationSetBy = Automatic
+
+	column payment_value
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0001-0014-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: payment_value
+
+		annotation SummarizationSetBy = Automatic
+
+	column n_payment_lines
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0015-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: n_payment_lines
+
+		annotation SummarizationSetBy = Automatic
+
+	column max_installments
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0016-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: max_installments
+
+		annotation SummarizationSetBy = Automatic
+
+	column n_zero_value_lines
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0017-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: n_zero_value_lines
+
+		annotation SummarizationSetBy = Automatic
+
+	column review_score
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0018-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: review_score
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_unique_id
+		dataType: string
+		lineageTag: 7a1b0001-0019-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_unique_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_city
+		dataType: string
+		lineageTag: 7a1b0001-0020-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_city
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_state
+		dataType: string
+		lineageTag: 7a1b0001-0021-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_zip_code_prefix
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0022-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_zip_code_prefix
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_lat
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0001-0023-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: customer_lat
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_lng
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0001-0024-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: customer_lng
+
+		annotation SummarizationSetBy = Automatic
+
+	column primary_seller_id
+		dataType: string
+		lineageTag: 7a1b0001-0025-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: primary_seller_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_city
+		dataType: string
+		lineageTag: 7a1b0001-0026-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_city
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_state
+		dataType: string
+		lineageTag: 7a1b0001-0027-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_lat
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0001-0028-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: seller_lat
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_lng
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0001-0029-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: seller_lng
+
+		annotation SummarizationSetBy = Automatic
+
+	column primary_product_id
+		dataType: string
+		lineageTag: 7a1b0001-0030-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: primary_product_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_category
+		dataType: string
+		lineageTag: 7a1b0001-0031-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: product_category
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_weight_g
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0032-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: product_weight_g
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_label_eligible
+		dataType: boolean
+		formatString: 0
+		lineageTag: 7a1b0001-0033-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: is_label_eligible
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_late
+		dataType: boolean
+		formatString: 0
+		lineageTag: 7a1b0001-0034-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: is_late
+
+		annotation SummarizationSetBy = Automatic
+
+	column estimated_lead_days
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0035-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: estimated_lead_days
+
+		annotation SummarizationSetBy = Automatic
+
+	column delivery_days
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0036-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: delivery_days
+
+		annotation SummarizationSetBy = Automatic
+
+	column delay_days
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0001-0037-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: delay_days
+
+		annotation SummarizationSetBy = Automatic
+
+	column delay_hours
+		dataType: double
+		formatString: 0.00
+		lineageTag: 7a1b0001-0038-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: delay_hours
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_orders = m
+		mode: import
+		source =
+				let
+				    Source = AnalyticsSchema,
+				    Table = Source{[Name = "fact_orders", Kind = "Table"]}[Data]
+				in
+				    Table
+
+	annotation PBI_ResultType = Table
+

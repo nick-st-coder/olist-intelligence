@@ -1,0 +1,74 @@
+table dim_customers
+	lineageTag: 7a1b0005-0000-4000-8000-000000000001
+
+	column customer_id
+		dataType: string
+		isKey
+		lineageTag: 7a1b0005-0001-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_unique_id
+		dataType: string
+		lineageTag: 7a1b0005-0002-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_unique_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_city
+		dataType: string
+		lineageTag: 7a1b0005-0003-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_city
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_state
+		dataType: string
+		lineageTag: 7a1b0005-0004-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_zip_code_prefix
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0005-0005-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_zip_code_prefix
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_lat
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0005-0006-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_lat
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_lng
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0005-0007-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_lng
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_customers = m
+		mode: import
+		source =
+				let
+				    Source = AnalyticsSchema,
+				    Table = Source{[Name = "dim_customers", Kind = "Table"]}[Data]
+				in
+				    Table
+
+	annotation PBI_ResultType = Table
+

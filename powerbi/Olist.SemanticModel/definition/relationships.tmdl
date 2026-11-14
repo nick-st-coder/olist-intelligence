@@ -1,0 +1,28 @@
+relationship 6f1c2a10-0001-4000-8000-000000000001
+	fromColumn: fact_orders.customer_id
+	toColumn: dim_customers.customer_id
+
+relationship 6f1c2a10-0001-4000-8000-000000000002
+	fromColumn: fact_orders.primary_seller_id
+	toColumn: dim_sellers.seller_id
+
+relationship 6f1c2a10-0001-4000-8000-000000000003
+	fromColumn: fact_orders.primary_product_id
+	toColumn: dim_products.product_id
+
+relationship 6f1c2a10-0001-4000-8000-000000000004
+	fromColumn: fact_orders.order_date
+	toColumn: dim_date.date_day
+
+relationship 6f1c2a10-0001-4000-8000-000000000005
+	fromColumn: fact_order_items.product_id
+	toColumn: dim_products.product_id
+
+relationship 6f1c2a10-0001-4000-8000-000000000006
+	fromColumn: fact_order_items.seller_id
+	toColumn: dim_sellers.seller_id
+
+relationship 6f1c2a10-0001-4000-8000-000000000007
+	fromColumn: fact_order_items.order_date
+	toColumn: dim_date.date_day
+

@@ -57,6 +57,19 @@ CONTEXT.md
 Thumbs.db
 .vscode/settings.json
 
+# Power BI — user- and machine-specific state, never committed
+powerbi/**/.pbi/localSettings.json
+powerbi/**/.pbi/cache.abf
+powerbi/**/.pbi/unappliedChanges.json
+powerbi/**/diagramLayout.json
+powerbi/**/semanticModelDiagramLayout.json
+powerbi/**/mobileState.json
+
+# Local tooling (TMDL validator, AS query helper) — build output only
+.tools/
+tools/**/bin/
+tools/**/obj/
+
 #Github
 .github/agents/
 .github/instructions/

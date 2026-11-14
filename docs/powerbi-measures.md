@@ -15,7 +15,7 @@ Import these six tables from the `analytics` dataset:
 | `dim_customers` | one row per `customer_id` | 99,441 |
 | `dim_products` | one row per `product_id` | 32,951 |
 | `dim_sellers` | one row per `seller_id` | 3,095 |
-| `dim_date` | one row per day | 1,096 |
+| `dim_date` | one row per day | 1,095 |
 
 Relationships (all single-direction, `dim` → `fact`):
 
@@ -72,7 +72,13 @@ SUM ( fact_orders[freight_value] )
 Average Order Value =
 DIVIDE ( [Total Revenue], [Total Orders] )
 ```
-**Expected: 137.75**
+**Expected: 136.68**
+
+> **Correction (2026-11-13).** This was documented as 137.75, which is
+> `13,591,643.70 / 98,673` — the denominator was the number of orders that *have a review*,
+> not the number of orders. The measure divides by `[Total Orders]` (99,441), so the correct
+> value is **136.68**. Verified against BigQuery with
+> `scripts/validate_powerbi_measures.py`.
 
 ```dax
 Freight Share of Revenue =

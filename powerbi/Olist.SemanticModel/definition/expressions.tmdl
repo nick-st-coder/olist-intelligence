@@ -1,0 +1,11 @@
+expression AnalyticsSchema =
+		let
+		    Source = GoogleBigQuery.Database([BillingProject = "olist-intelligence", UseStorageApi = false]),
+		    Project = Source{[Name = "olist-intelligence"]}[Data],
+		    Schema = Project{[Name = "analytics", Kind = "Schema"]}[Data]
+		in
+		    Schema
+	lineageTag: ed2d03b8-aea2-4dd3-9f26-f13078edd653
+
+	annotation PBI_ResultType = Table
+

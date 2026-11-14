@@ -19,7 +19,7 @@ regions drive it; what is the average order value; how do freight costs affect p
 |------|---------|----------|
 | Total Revenue | `[Total Revenue]` | 13,591,643.70 |
 | Total Orders | `[Total Orders]` | 99,441 |
-| Average Order Value | `[Average Order Value]` | 137.75 |
+| Average Order Value | `[Average Order Value]` | 136.68 |
 | Freight Share | `[Freight Share of Revenue]` | 16.57% |
 
 ### Visuals

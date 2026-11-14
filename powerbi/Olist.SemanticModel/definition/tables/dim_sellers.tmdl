@@ -1,0 +1,66 @@
+table dim_sellers
+	lineageTag: 7a1b0007-0000-4000-8000-000000000001
+
+	column seller_id
+		dataType: string
+		isKey
+		lineageTag: 7a1b0007-0001-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_city
+		dataType: string
+		lineageTag: 7a1b0007-0002-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_city
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_state
+		dataType: string
+		lineageTag: 7a1b0007-0003-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_zip_code_prefix
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0007-0004-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_zip_code_prefix
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_lat
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0007-0005-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: seller_lat
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_lng
+		dataType: double
+		formatString: 0.000000
+		lineageTag: 7a1b0007-0006-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: seller_lng
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_sellers = m
+		mode: import
+		source =
+				let
+				    Source = AnalyticsSchema,
+				    Table = Source{[Name = "dim_sellers", Kind = "Table"]}[Data]
+				in
+				    Table
+
+	annotation PBI_ResultType = Table
+

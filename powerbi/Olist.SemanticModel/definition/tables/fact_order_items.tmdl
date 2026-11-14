@@ -1,0 +1,187 @@
+table fact_order_items
+	lineageTag: 7a1b0003-0000-4000-8000-000000000001
+
+	measure 'Category Revenue' = SUM ( fact_order_items[price] )
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0004-0001-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Category Revenue Share %' =
+			DIVIDE (
+			    [Category Revenue],
+			    CALCULATE ( [Category Revenue], ALL ( dim_products[product_category] ) )
+			)
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0004-0002-4000-8000-000000000001
+
+	measure 'Category Late Rate %' =
+			DIVIDE (
+			    CALCULATE ( COUNTROWS ( fact_order_items ), fact_order_items[is_late] = TRUE ),
+			    CALCULATE ( COUNTROWS ( fact_order_items ), fact_order_items[is_label_eligible] = TRUE )
+			)
+		formatString: 0.00%;-0.00%;0.00%
+		lineageTag: 7a1b0004-0003-4000-8000-000000000001
+
+	measure 'Category Freight' = SUM ( fact_order_items[freight_value] )
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0004-0004-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	measure 'Category Items' = COUNTROWS ( fact_order_items )
+		formatString: #,0
+		lineageTag: 7a1b0004-0005-4000-8000-000000000001
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column order_id
+		dataType: string
+		lineageTag: 7a1b0003-0001-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_item_id
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0003-0002-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_item_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_id
+		dataType: string
+		lineageTag: 7a1b0003-0003-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: product_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_id
+		dataType: string
+		lineageTag: 7a1b0003-0004-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_id
+
+		annotation SummarizationSetBy = Automatic
+
+	column shipping_limit_date
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 7a1b0003-0005-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: shipping_limit_date
+
+		annotation SummarizationSetBy = Automatic
+
+	column price
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0003-0006-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: price
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column freight_value
+		dataType: double
+		formatString: \$#,0.00;(\$#,0.00);\$#,0.00
+		lineageTag: 7a1b0003-0007-4000-8000-000000000001
+		summarizeBy: sum
+		sourceColumn: freight_value
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation PBI_FormatHint = {"isGeneralNumber":true}
+
+	column order_status
+		dataType: string
+		lineageTag: 7a1b0003-0008-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_status
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_purchase_timestamp
+		dataType: dateTime
+		formatString: General Date
+		lineageTag: 7a1b0003-0009-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: order_purchase_timestamp
+
+		annotation SummarizationSetBy = Automatic
+
+	column order_date = DATE ( YEAR ( fact_order_items[order_purchase_timestamp] ), MONTH ( fact_order_items[order_purchase_timestamp] ), DAY ( fact_order_items[order_purchase_timestamp] ) )
+		formatString: Short Date
+		lineageTag: 7a1b0003-0010-4000-8000-000000000001
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_category
+		dataType: string
+		lineageTag: 7a1b0003-0011-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: product_category
+
+		annotation SummarizationSetBy = Automatic
+
+	column product_weight_g
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0003-0012-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: product_weight_g
+
+		annotation SummarizationSetBy = Automatic
+
+	column seller_state
+		dataType: string
+		lineageTag: 7a1b0003-0013-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: seller_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column customer_state
+		dataType: string
+		lineageTag: 7a1b0003-0014-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: customer_state
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_label_eligible
+		dataType: boolean
+		formatString: 0
+		lineageTag: 7a1b0003-0015-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: is_label_eligible
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_late
+		dataType: boolean
+		formatString: 0
+		lineageTag: 7a1b0003-0016-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: is_late
+
+		annotation SummarizationSetBy = Automatic
+
+	partition fact_order_items = m
+		mode: import
+		source =
+				let
+				    Source = AnalyticsSchema,
+				    Table = Source{[Name = "fact_order_items", Kind = "Table"]}[Data]
+				in
+				    Table
+
+	annotation PBI_ResultType = Table
+

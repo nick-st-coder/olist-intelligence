@@ -1,0 +1,106 @@
+table dim_date
+	lineageTag: 7a1b0008-0000-4000-8000-000000000001
+	dataCategory: Time
+
+	column date_day
+		dataType: dateTime
+		isKey
+		formatString: Short Date
+		lineageTag: 7a1b0008-0001-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: date_day
+
+		annotation SummarizationSetBy = Automatic
+
+		annotation UnderlyingDateTimeDataType = Date
+
+	column year
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0008-0002-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: year
+
+		annotation SummarizationSetBy = Automatic
+
+	column quarter
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0008-0003-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: quarter
+
+		annotation SummarizationSetBy = Automatic
+
+	column month
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0008-0004-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: month
+
+		annotation SummarizationSetBy = Automatic
+
+	column week
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0008-0005-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: week
+
+		annotation SummarizationSetBy = Automatic
+
+	column day_of_week
+		dataType: int64
+		formatString: 0
+		lineageTag: 7a1b0008-0006-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: day_of_week
+
+		annotation SummarizationSetBy = Automatic
+
+	column is_weekend
+		dataType: boolean
+		formatString: 0
+		lineageTag: 7a1b0008-0007-4000-8000-000000000001
+		summarizeBy: none
+		sourceColumn: is_weekend
+
+		annotation SummarizationSetBy = Automatic
+
+	column year_month = FORMAT ( dim_date[date_day], "YYYY-MM" )
+		lineageTag: 7a1b0008-0008-4000-8000-000000000001
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column month_name = FORMAT ( dim_date[date_day], "MMMM" )
+		lineageTag: 7a1b0008-0009-4000-8000-000000000001
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column day_name = FORMAT ( dim_date[date_day], "dddd" )
+		lineageTag: 7a1b0008-0010-4000-8000-000000000001
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	column year_month_sort = dim_date[year] * 100 + dim_date[month]
+		formatString: 0
+		lineageTag: 7a1b0008-0011-4000-8000-000000000001
+		summarizeBy: none
+
+		annotation SummarizationSetBy = Automatic
+
+	partition dim_date = m
+		mode: import
+		source =
+				let
+				    Source = AnalyticsSchema,
+				    Table = Source{[Name = "dim_date", Kind = "Table"]}[Data]
+				in
+				    Table
+
+	annotation PBI_ResultType = Table
+
