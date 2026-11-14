@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-from src.config import FORBIDDEN_FEATURES
+from src.config import DATA_DIR, FORBIDDEN_FEATURES, RAW_FILES
 from src.features.build_features import (
     BOOLEAN_FEATURES,
     CATEGORICAL_FEATURES,
@@ -19,6 +19,8 @@ from src.preprocessing.cleaning import build_order_level_dataset
 
 @pytest.fixture(scope="module")
 def order_level() -> pd.DataFrame:
+    if not all((DATA_DIR / path).is_file() for path in RAW_FILES.values()):
+        pytest.skip("raw CSVs absent; download them from Kaggle into data/")
     return build_order_level_dataset(load_raw_tables())
 
 

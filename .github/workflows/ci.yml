@@ -48,7 +48,14 @@ jobs:
           python-version: "3.11"
       - name: Install dependencies
         run: uv sync --all-groups
+      - name: Prepare dbt profiles
+        # profiles.yml holds credentials and is gitignored; the example is the committed source.
+        run: |
+          mkdir -p "$HOME/.dbt"
+          cp dbt/profiles.yml.example "$HOME/.dbt/profiles.yml"
       - name: Validate dbt project
+        env:
+          DBT_PROFILES_DIR: "$HOME/.dbt"
         run: uv run dbt parse --project-dir dbt
 
   docker:

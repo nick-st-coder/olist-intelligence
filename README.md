@@ -695,9 +695,11 @@ four things that would otherwise fail silently:
 | `docker` | builds `docker/api.Dockerfile` and `docker/app.Dockerfile` | a Dockerfile that no longer builds |
 
 The test job needs no data or model artefact: the API and serving tests skip cleanly when the
-artefact is absent, and the monitoring tests use synthetic frames. The dbt job validates the
-project offline with `dbt parse`, so it needs no database. The image builds are the only job
-that requires Docker, and they run on GitHub's hosted runners.
+artefact is absent, the cleaning, feature and model tests skip when the raw CSVs are absent, and
+the monitoring tests use synthetic frames. The dbt job validates the project offline with
+`dbt parse` against a profiles file generated from `dbt/profiles.yml.example`, so it needs no
+database. The image builds are the only job that requires Docker, and they run on GitHub's
+hosted runners.
 
 The project is deliberately **local-first**, so there is no deploy step: the images are built to
 prove they compile, not pushed to a registry. Cloud Run was considered and set aside — the

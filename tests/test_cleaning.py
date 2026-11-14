@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import pandas as pd
 import pytest
-from src.config import FORBIDDEN_FEATURES
+from src.config import DATA_DIR, FORBIDDEN_FEATURES, RAW_FILES
 from src.ingestion.extract import load_raw_tables
 from src.preprocessing.aggregation import (
     aggregate_order_items,
@@ -27,6 +27,8 @@ from src.validation.schemas import validate_order_level
 
 @pytest.fixture(scope="module")
 def tables() -> dict[str, pd.DataFrame]:
+    if not all((DATA_DIR / path).is_file() for path in RAW_FILES.values()):
+        pytest.skip("raw CSVs absent; download them from Kaggle into data/")
     return load_raw_tables()
 
 

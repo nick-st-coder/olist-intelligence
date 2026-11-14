@@ -5,7 +5,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 import pytest
-from src.config import FORBIDDEN_FEATURES
+from src.config import DATA_DIR, FORBIDDEN_FEATURES, RAW_FILES
 from src.features.build_features import ALL_FEATURES, BOOLEAN_FEATURES, CATEGORICAL_FEATURES
 from src.modeling.models import build_model, model_names
 from src.modeling.preprocessing import build_preprocessor
@@ -117,6 +117,8 @@ def test_feature_subset_restricts_the_pipeline(config: dict, toy_frame: pd.DataF
 
 def test_boolean_features_are_numeric_in_the_feature_frame() -> None:
     """``SimpleImputer`` rejects ``bool`` dtype, so the cast must happen before the pipeline."""
+    if not all((DATA_DIR / path).is_file() for path in RAW_FILES.values()):
+        pytest.skip("raw CSVs absent; download them from Kaggle into data/")
     from src.features.build_features import build_feature_frame
     from src.ingestion.extract import load_raw_tables
     from src.preprocessing.cleaning import build_order_level_dataset
