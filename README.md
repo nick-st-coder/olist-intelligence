@@ -12,24 +12,28 @@ technologies used.
 
 ---
 
-## Status
+## Business problems solved
 
-| Phase | Scope | State |
-|-------|-------|-------|
-| 1 | Data understanding — inventory, grain, keys, FK integrity, data dictionary, data quality | ✅ Complete — [`notebooks/01_data_understanding.ipynb`](notebooks/01_data_understanding.ipynb) |
-| 2 | Exploratory data analysis — business findings | ✅ Complete — [`notebooks/02_eda.ipynb`](notebooks/02_eda.ipynb) |
-| 3 | Cleaning & preprocessing — order-level dataset, Pandera schemas, tests | ✅ Complete — `src/preprocessing/`, `data/processed/orders_enriched.parquet` |
-| 4 | Data engineering — Postgres + BigQuery warehouses, dbt models and tests, Airflow | ✅ Complete — both targets build 111 tests green and reconcile to identical figures |
-| 5 | Business intelligence — Power BI dashboards, Excel report | ✅ Complete — `powerbi/` (PBIP: TMDL model + 3-page report), 20/20 measures validated |
-| 6 | Machine learning — delivery-delay model, MLflow registry | ✅ Complete — `src/features/`, `src/modeling/`, [`notebooks/03_model_experiments.ipynb`](notebooks/03_model_experiments.ipynb) |
-| 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ✅ Complete — `api/`, `app/`, `src/serving/`, `docker/api.Dockerfile`, `docker/app.Dockerfile` |
-| 8 | Monitoring — Evidently drift, retraining workflow | ✅ Complete — simulated monthly drift, delayed-label performance, gated MLflow registration |
-| 9 | CI/CD & documentation — GitHub Actions | ✅ Complete — `.github/workflows/ci.yml` (lint, test, dbt parse, image build) |
+**Sales intelligence** — the platform answers how revenue moves and what drives it: R$13.59M
+across 99,441 orders at an average order value of **R$136.68**, with freight at **16.57%** of
+revenue. São Paulo, Rio de Janeiro and Minas Gerais together account for roughly **60%** of
+revenue, and only **3.12%** of customers (2,997 of 96,096) buy again, so revenue is
+concentrated in a small repeat segment.
 
-Phases 1–9 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
-dbt project with its tests, the Airflow DAG, the delivery-delay model, the prediction service,
-the Power BI report, the simulated monitoring workflow and the CI pipeline are complete, and
-the two warehouses reconcile to identical figures.
+**Logistics and delivery performance** — **8.11%** of the 96,470 orders with a known delivery
+outcome (7,826) arrive later than estimated; deliveries average 12.50 days and late orders run
+8.9 days past the promise. The worst late rates sit in the northern and north-eastern states,
+the furthest from the São Paulo seller base. A late order can be ranked *before it ships*: the
+checkout-time model concentrates late orders **~1.8× better than chance** (test PR-AUC 0.099
+against a 0.055 base rate), catching roughly half of late orders while flagging a fifth of the
+book — enough to prioritise a support queue. The monthly late rate swings from 1.36% to 21.36%
+with no change in delivery performance, so every readout treats the label as the promise it is,
+not as a logistics metric.
+
+**Customer experience** — late delivery measurably depresses satisfaction: late orders average
+**2.57** on the review scale against **4.29** for on-time orders, a 1.73-point gap, and scores
+are bimodal (57.3% at 5, 11.4% at 1) — customers are either delighted or furious, and the
+delivery promise is the difference.
 
 ---
 
@@ -769,6 +773,62 @@ working directory.
 - **Secrets never in Git** — `.env` (gitignored) plus `.env.example`.
 - **Local before cloud** — everything runs via Docker Compose; GCP is optional.
 - Paths resolve from a single project-root constant, never from the current working directory.
+
+---
+
+## Most significant issues fixed
+
+**Seller history leaked labels from the future.** The first feature build keyed each seller's
+expanding window on *purchase* date. A prior order's outcome becomes knowable on its
+**delivery** date, not its purchase date, so an order placed in February saw January orders
+that were still in transit — a partial view of the future that silently inflated validation
+scores and matched the textbook leak pattern. The features now merge on a completion timeline
+(`merge_asof` on the purchase timestamp against already-delivered orders), and
+`tests/test_historical.py` asserts the property directly: relabelling a later order cannot
+move an earlier one's features. 94.5% of orders still have seller history.
+
+**Training and serving computed features differently.** Reimplementing the 22-column feature
+frame for a single checkout payload in `src/serving/` would have created a second version of
+lead time, calendar block, distance and seller history — the most common way a deployed model
+silently degrades, with no error and no metric to catch it. The derivations were extracted
+from the batch join logic, the service imports those same functions, and a test pins both
+paths to identical frames on 100 real orders, column by column.
+
+**Class weighting made every displayed probability wrong.** `class_weight="balanced"` is what
+makes an 8% positive rate learnable, but it shifted the output scale: the model predicted a
+mean probability of **0.50** where the true late rate was **0.068**, so the UI would have
+shown "coin flip" for a 1-in-9 order. Isotonic calibration restored honest probabilities
+(mean 0.114 vs 0.068) and moved the cost-optimal threshold from 0.62 to 0.15.
+
+**pandas and dbt disagreed on the review tie-break.** Two implementations of the same rule
+differed on which review to keep when an order had several sharing the latest timestamp — the
+docstring said lowest score, the pandas code kept the highest, dbt kept the lowest. Row counts
+matched either way, so the divergence was invisible: **320 orders** would have carried a
+different review score in the warehouse than in the ML dataset. Aligned to `keep="first"`;
+both warehouses now reconcile to identical figures.
+
+**`.dt.days` hid 1,292 late orders.** `delay_days` truncated sub-day timedeltas towards zero,
+so orders delivered minutes after the estimate day's midnight reported a zero delay — and the
+schema assertion that should have caught it used the same truncated column. Kept hour
+resolution in `delay_hours` and moved the check onto a raw-timestamp comparison, so a
+diagnostic column can no longer understate delay severity by 16.5% of all positives.
+
+**Single-order explanations returned a table of zeros.** The explainer used the row being
+explained as its own reference distribution, and a Shapley value measures deviation from the
+baseline — nothing deviates from itself. The service now draws a reference distribution from
+delivered history and asserts additivity for every explanation, making that silent-wrong-answer
+failure impossible.
+
+**A null-semantics bug inflated the low-score story.** `BLANK() <= 2` evaluates to TRUE in
+DAX but not in SQL, so 768 orders with no review were counted as dissatisfied — **15.33%**
+instead of the true **14.56%**. Adding `NOT ISBLANK(...)` brought all 20 measures into
+agreement with the warehouse.
+
+**Porting the median to BigQuery silently dropped 9,105 ZIP prefixes.** The
+`percentile_cont` rewrite selected the middle row with `(n + 1) / 2`, and BigQuery's `/`
+returns a float, so every even-counted prefix matched no row and produced NULL coordinates —
+breaking the distance feature and every geographic visual. Averaging the floor/ceil range, the
+correct definition of a median, restored identical figures on both warehouses.
 
 ---
 
