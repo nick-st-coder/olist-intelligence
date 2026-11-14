@@ -7,6 +7,7 @@ code produced, which keeps the online path and the batch path identical.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
 from dataclasses import dataclass
@@ -21,6 +22,16 @@ from src.features.build_features import ALL_FEATURES
 logger = logging.getLogger(__name__)
 
 DEFAULT_MODEL_PATH: Path = PROCESSED_DIR / "modeling" / "delivery_delay_pipeline.joblib"
+
+
+def model_fingerprint(path: Path) -> str:
+    """Return a short content-addressed model version."""
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1 << 20), b""):
+            digest.update(chunk)
+    return digest.hexdigest()[:12]
+
 
 #: Risk bands used by the API and the dashboard. Chosen against the tuned threshold so that
 #: "high" starts where the expected cost of missing the order exceeds the cost of an alarm.

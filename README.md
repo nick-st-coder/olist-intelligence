@@ -21,13 +21,13 @@ technologies used.
 | 5 | Business intelligence — Power BI dashboards, Excel report | ✅ Complete — `powerbi/` (PBIP: TMDL model + 3-page report), 20/20 measures validated |
 | 6 | Machine learning — delivery-delay model, MLflow registry | ✅ Complete — `src/features/`, `src/modeling/`, [`notebooks/03_model_experiments.ipynb`](notebooks/03_model_experiments.ipynb) |
 | 7 | Deployment — FastAPI, Streamlit, Docker, Cloud Run | ✅ Complete — `api/`, `app/`, `src/serving/`, `docker/api.Dockerfile`, `docker/app.Dockerfile` |
-| 8 | Monitoring — Evidently drift, retraining workflow | ⬜ Planned |
+| 8 | Monitoring — Evidently drift, retraining workflow | ✅ Complete — simulated monthly drift, delayed-label performance, gated MLflow registration |
 | 9 | CI/CD & documentation — GitHub Actions | ⬜ Planned |
 
-Phases 1–7 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
-dbt project with its tests, the Airflow DAG, the delivery-delay model, the prediction service
-and the Power BI report are complete, and the two warehouses reconcile to identical figures.
-`src/monitoring/` is still an empty placeholder. This README is updated as each phase lands.
+Phases 1–8 are implemented: the local Postgres warehouse, the BigQuery warehouse, the
+dbt project with its tests, the Airflow DAG, the delivery-delay model, the prediction service,
+the Power BI report and simulated monitoring workflow are complete, and the two warehouses
+reconcile to identical figures.
 
 ---
 
@@ -156,7 +156,12 @@ olist-intelligence/
 │   │   ├── features.py       # request → feature frame
 │   │   ├── service.py        # the prediction service, framework-independent
 │   │   └── samples.py        # real orders and form options for the UI
-│   └── monitoring/           # drift.py
+│   └── monitoring/
+│       ├── drift.py          # Evidently data-quality and feature/prediction drift
+│       ├── simulation.py     # chronological batch replay and delayed labels
+│       ├── performance.py   # PR-AUC/base-rate lift, confusion matrix, calibration
+│       ├── retraining.py    # candidate comparison and gated MLflow registration
+│       └── __main__.py      # monitoring CLI
 ├── dbt/models/{staging,intermediate,marts}/
 ├── dags/                     # Airflow DAG
 ├── api/                      # FastAPI: /health, /predict, /model/info, /metrics
@@ -623,6 +628,39 @@ tables. Real orders from the dataset can be loaded into the form as a starting p
 
 It talks HTTP rather than importing the model, so it demonstrates the same contract an external
 caller uses and can be pointed at a deployment with the `API_URL` environment variable.
+
+---
+
+## Monitoring
+
+The source dataset is static and historical, so monitoring is an explicitly **simulated
+replay**, not production telemetry. The workflow compares monthly batches from June–August 2018
+with the model's training-period reference. Each Evidently report includes feature and prediction
+drift, data quality, missing/invalid values and newly observed categories.
+
+```bash
+# Install the optional monitoring and candidate-training dependencies
+uv sync --group monitoring
+
+# Replay monthly batches and create Evidently HTML/JSON plus delayed-label metrics
+uv run python -m src.monitoring run
+
+# Fit a candidate using data before the holdout; register only if it clears the PR-AUC gate
+uv run python -m src.monitoring retrain
+```
+
+Reports are written under `data/processed/monitoring/`: `latest-run.json` links to per-month
+`drift.html`, Evidently JSON, drift summaries and performance summaries. Labels become available
+30 days after the recorded delivery date; each cycle reports performance only on outcomes that
+would have arrived by then. PR-AUC is shown with the observed late-rate baseline and its lift,
+because the label captures the promise date (not logistics performance) and its base rate changes
+substantially over time.
+
+The retraining command fits the current model family on all labelled data before the holdout,
+then compares production and candidate PR-AUC on the same chronological replay window. It does
+not tune on that holdout. Only a candidate that meets `min_pr_auc_lift` in
+`configs/monitoring.yaml` is registered in the local MLflow registry; a rejected candidate leaves
+the production artefact unchanged. All outputs remain labelled simulated.
 
 ### Containers
 

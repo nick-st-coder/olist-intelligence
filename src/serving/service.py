@@ -8,7 +8,6 @@ and nothing in it changes between requests.
 
 from __future__ import annotations
 
-import hashlib
 import logging
 import threading
 import time
@@ -25,6 +24,7 @@ from src.modeling.predict import (
     DEFAULT_MODEL_PATH,
     load_metadata,
     load_pipeline,
+    model_fingerprint,
     predict_orders,
 )
 from src.serving.features import build_serving_features
@@ -37,19 +37,6 @@ BACKGROUND_ROWS = 300
 #: Fraction of the reference frame kept for explanations. 2,000 rows is enough for a stable
 #: background and small enough to build in under a second.
 BACKGROUND_SAMPLE = 2000
-
-
-def _fingerprint(path: Path) -> str:
-    """Content-addressed model version.
-
-    A hash of the artefact is a version that cannot drift from the binary it names — unlike a
-    hand-maintained string, which goes stale silently after a retrain.
-    """
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1 << 20), b""):
-            digest.update(chunk)
-    return digest.hexdigest()[:12]
 
 
 @dataclass
@@ -137,7 +124,7 @@ class DeliveryDelayService:
         self.pipeline = load_pipeline(self.model_path)
         self.metadata = load_metadata(self.metadata_path)
         self.threshold = float(self.metadata.get("threshold", 0.5))
-        self.version = _fingerprint(self.model_path)
+        self.version = model_fingerprint(self.model_path)
 
         self._load_history_context()
 

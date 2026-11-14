@@ -12,12 +12,14 @@ Run it with::
 
 from __future__ import annotations
 
+import json
 import os
 from datetime import date, datetime, timedelta
 
 import pandas as pd
 import requests
 import streamlit as st
+from src.config import PROCESSED_DIR
 
 DEFAULT_API_URL = os.getenv("API_URL", "http://localhost:8000")
 API_TIMEOUT = float(os.getenv("API_TIMEOUT_SECONDS", "30"))
@@ -228,6 +230,68 @@ def render_result(result: dict) -> None:
     )
 
 
+def render_monitoring() -> None:
+    """Show the latest historical replay and its delayed-label summaries, when available."""
+    report_root = PROCESSED_DIR / "monitoring"
+    manifest_path = report_root / "latest-run.json"
+    st.subheader("Monitoring")
+    if not manifest_path.exists():
+        st.info("No monitoring replay is available yet. Run `python -m src.monitoring run`.")
+        return
+
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        st.error(f"Could not read the monitoring summary: {exc}")
+        return
+
+    if not manifest.get("simulation"):
+        st.error("The monitoring output is missing its simulation marker.")
+        return
+    st.warning(
+        "SIMULATED — this is a replay of historical orders, not live production telemetry."
+    )
+
+    for batch in manifest.get("batches", []):
+        batch_id = batch["batch_id"]
+        batch_dir = report_root / "simulated" / batch_id
+        with st.expander(f"{batch_id} · {batch['orders']:,} orders"):
+            drift_path = batch_dir / "summary.json"
+            performance_path = batch_dir / "performance.json"
+            try:
+                drift = json.loads(drift_path.read_text(encoding="utf-8"))
+                performance = json.loads(performance_path.read_text(encoding="utf-8"))
+            except (OSError, json.JSONDecodeError) as exc:
+                st.error(f"Could not read this batch's monitoring output: {exc}")
+                continue
+
+            first, second, third = st.columns(3)
+            first.metric("Feature drift", len(drift["drifted_features"]))
+            second.metric("Prediction drift", "Yes" if drift["prediction_drift"] else "No")
+            third.metric("Labels available", f"{performance['labelled_orders']:,}")
+            if performance["status"] == "ready":
+                st.write(
+                    f"**PR-AUC:** {performance['pr_auc']:.3f} · "
+                    f"**late-rate baseline:** {performance['base_rate']:.1%} · "
+                    f"**lift:** {performance['pr_auc_lift_over_base_rate']:.2f}x"
+                )
+                st.caption(
+                    "PR-AUC is reported against the observed late-rate baseline; this label "
+                    "tracks promise dates, not delivery performance."
+                )
+            else:
+                st.info("Not enough matured labels to calculate classification performance.")
+
+            if st.button("View interactive drift report", key=f"drift-{batch_id}"):
+                html_path = batch_dir / "drift.html"
+                try:
+                    report_html = html_path.read_text(encoding="utf-8")
+                except OSError as exc:
+                    st.error(f"Could not read the Evidently report: {exc}")
+                else:
+                    st.components.v1.html(report_html, height=800, scrolling=True)
+
+
 def main() -> None:
     st.set_page_config(page_title="Delivery Delay Prediction", page_icon="📦", layout="wide")
 
@@ -347,6 +411,9 @@ def main() -> None:
             st.json(payload)
     else:
         st.info("Set the order details and press **Predict**.")
+
+    st.divider()
+    render_monitoring()
 
 
 main()

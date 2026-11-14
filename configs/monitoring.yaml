@@ -1,0 +1,36 @@
+# Monitoring configuration for the delivery-delay model.
+#
+# The Olist dataset is historical and static, so "production" is simulated: the post-training
+# window is replayed as chronological batches and every report is labelled simulated. Nothing
+# here is a real deployment signal; it demonstrates the monitoring workflow end to end.
+
+seed: 42
+
+# Where the monitoring reports and the simulated batch ledger are written.
+output_dir: data/processed/monitoring
+
+# The reference distribution drift is measured against. This is the training window, the same
+# period the model was fitted on, so "no drift" means "the incoming batch looks like training".
+reference:
+  start: "2017-01-01"
+  end: "2018-03-31"
+
+# Simulated production window. Orders purchased in this period are replayed as incoming batches.
+# The dataset ends at 2018-08-31, so the test window is the natural replay source.
+simulation:
+  start: "2018-06-01"
+  end: "2018-08-31"
+  # One batch per calendar month of the simulation window.
+  # Labels are "delivered" with a delay: an order purchased in a batch is only labelled once its
+  # delivery outcome is known. Median delivery takes ~10 days, so a 30-day label delay means a
+  # batch's labels arrive with the next batch.
+  label_delay_days: 30
+
+# Drift alerting. A feature is flagged when its drift score exceeds this threshold.
+drift:
+  threshold: 0.5
+
+# Retraining gate. A candidate is registered only if it beats production on the same window.
+retraining:
+  # Minimum relative improvement in PR-AUC over production before a candidate is registered.
+  min_pr_auc_lift: 0.05

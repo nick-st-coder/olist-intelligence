@@ -53,6 +53,18 @@ serving = [
     "streamlit>=1.40",
     "uvicorn[standard]>=0.34",
 ]
+monitoring = [
+    "evidently>=0.7.23",
+    "joblib>=1.4",
+    "lightgbm>=4.5",
+    "mlflow>=2.18",
+    "numpy>=1.26",
+    "pandas>=2.2,<3",
+    "pyarrow>=16.0",
+    "pydantic>=2.11",
+    "scikit-learn>=1.5",
+    "xgboost>=2.1",
+]
 
 [tool.ruff]
 line-length = 100
