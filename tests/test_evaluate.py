@@ -11,6 +11,7 @@ from src.modeling.evaluate import (
     compute_metrics,
     cost_sensitivity,
     metrics_frame,
+    savings_vs_baseline,
     threshold_curve,
 )
 from src.modeling.predict import risk_band
@@ -106,6 +107,28 @@ def test_risk_bands_follow_the_threshold() -> None:
     assert risk_band(0.02, threshold=0.15) == "low"
     # The same probability lands in a different band under a different threshold.
     assert risk_band(0.2, threshold=0.6) == "low"
+
+
+def test_savings_vs_baseline_matches_flag_nothing() -> None:
+    y, proba = _separable()
+    cost = CostMatrix(10.0, 1.0)
+    threshold, _ = best_cost_threshold(y, proba, cost=cost)
+    savings = savings_vs_baseline(y, proba, threshold=threshold, cost=cost)
+    assert savings["baseline_cost"] == pytest.approx(10.0 * y.sum())
+    assert savings["model_cost"] == pytest.approx(
+        compute_metrics(y, proba, threshold=threshold, cost=cost)["cost"]
+    )
+    assert savings["saved"] == pytest.approx(savings["baseline_cost"] - savings["model_cost"])
+    assert savings["saved_pct"] == pytest.approx(savings["saved"] / savings["baseline_cost"])
+    assert savings["saved_per_order"] == pytest.approx(savings["saved"] / len(y))
+
+
+def test_savings_vs_baseline_is_zero_when_nothing_is_flagged() -> None:
+    y, proba = _separable()
+    # a threshold above every probability flags nothing, exactly like the no-model baseline
+    savings = savings_vs_baseline(y, proba, threshold=2.0, cost=CostMatrix(10.0, 1.0))
+    assert savings["saved"] == pytest.approx(0.0)
+    assert savings["saved_pct"] == pytest.approx(0.0)
 
 
 def test_metrics_accept_a_pandas_series() -> None:

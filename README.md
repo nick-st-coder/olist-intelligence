@@ -26,9 +26,10 @@ outcome (7,826) arrive later than estimated; deliveries average 12.50 days and l
 the furthest from the São Paulo seller base. A late order can be ranked *before it ships*: the
 checkout-time model concentrates late orders **~1.8× better than chance** (test PR-AUC 0.099
 against a 0.055 base rate), catching roughly half of late orders while flagging a fifth of the
-book — enough to prioritise a support queue. The monthly late rate swings from 1.36% to 21.36%
-with no change in delivery performance, so every readout treats the label as the promise it is,
-not as a logistics metric.
+book — enough to prioritise a support queue, and at the chosen threshold it cuts the cost of
+late delivery by **~29%** on validation (≈ R$0.97 per order at R$50 per missed late order). The
+monthly late rate swings from 1.36% to 21.36% with no change in delivery performance, so every
+readout treats the label as the promise it is, not as a logistics metric.
 
 **Customer experience** — late delivery measurably depresses satisfaction: late orders average
 **2.57** on the review scale against **4.29** for on-time orders, a 1.73-point gap, and scores
@@ -446,6 +447,31 @@ generalisation. Optuna tuning on temporal folds did not close the gap.
 **0.688**, precision 0.099, recall 0.469, cost per order 0.52. The test late rate is 5.5% against
 the 9.2% the model was trained on, so the absolute numbers are worse than validation by
 construction.
+
+### What that is worth in money
+
+The cost matrix is in abstract units, but it converts to money once a missed late order is
+priced. The baseline is the no-model business — every late order is missed, so the cost is
+`10 × n_late`. The model's cost at its frozen threshold is subtracted from that;
+`savings_vs_baseline` in `src/modeling/evaluate.py` reproduces every figure below:
+
+| Window | No-model cost | Model cost | Saved | Saved % |
+|--------|---------------|------------|-------|---------|
+| Validation (13,547 orders) | 9,170 | 6,533 | 2,637 | **28.8%** |
+| Test (18,603 orders) | 10,190 | 9,756 | 434 | **4.3%** |
+
+The validation saving is the honest headline: the model cuts the cost of late delivery by
+**~29%**. The test window is smaller — its late rate (5.5%) is half the training rate and the
+model's precision is low, so false alarms nearly eat the savings. Both numbers are real, and
+the gap between them is itself a finding: the saving scales with the late rate, so the model
+pays for itself when late delivery is common and is nearly neutral when it is rare.
+
+To turn units into reais, price a missed late order. At **R$50** — a support contact, a refund
+negotiation and the review damage measured in the customer-experience section, roughly a third
+of the R$136.68 average order value — one unit is R$5. The validation window then saves
+**R$13,185 over 13,547 orders (≈ R$0.97 per order)**, which at Olist's ~6,300 orders a month is
+**≈ R$6,100 a month** at validation conditions, and ≈ R$730 a month at test conditions. The
+arithmetic is linear: halve the assumed cost and every saving halves.
 
 ### Threshold and calibration
 

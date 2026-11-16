@@ -159,3 +159,31 @@ def cost_sensitivity(
             }
         )
     return pd.DataFrame(rows)
+
+
+def savings_vs_baseline(
+    y_true: pd.Series | np.ndarray,
+    y_proba: np.ndarray,
+    *,
+    threshold: float,
+    cost: CostMatrix | None = None,
+) -> dict[str, float]:
+    """Cost saved relative to flagging nothing, the no-model baseline.
+
+    Without a model every late order is missed, so the baseline cost is
+    ``false_negative * n_late``. The model's cost at ``threshold`` is subtracted and the saving
+    reported in absolute units, as a percentage of the baseline and per order, so a money value
+    can be attached by pricing one cost unit.
+    """
+    cost = cost or CostMatrix()
+    y_true = np.asarray(y_true).astype(int)
+    metrics = compute_metrics(y_true, y_proba, threshold=threshold, cost=cost)
+    baseline_cost = cost.false_negative * int(y_true.sum())
+    saved = baseline_cost - metrics["cost"]
+    return {
+        "baseline_cost": float(baseline_cost),
+        "model_cost": float(metrics["cost"]),
+        "saved": float(saved),
+        "saved_pct": float(saved / baseline_cost) if baseline_cost > 0 else 0.0,
+        "saved_per_order": float(saved / len(y_true)),
+    }
